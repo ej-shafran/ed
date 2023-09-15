@@ -70,6 +70,8 @@ bool read_to_dot(Line_Builder *lb)
  */
 void insert_at(Line_Builder *target, Line_Builder *source, size_t location)
 {
+	assert(location <= target->count);
+
 	if (target->count + source->count > target->capacity) {
 		if (target->capacity == 0) {
 			target->capacity = DA_CAP_INIT;
