@@ -66,10 +66,10 @@ int main(int argc, char **argv)
 {
 	REBUILD_SELF(argc, argv);
 
-	bool *help =
-		flag_bool("-help", false, "Print this help message and exit.", "h");
-	bool *run_after =
-		flag_bool("-run", false, "After building, also run the output.", "r");
+	bool *help = flag_bool("-help", false,
+			       "Print this help message and exit.", "h");
+	bool *run_after = flag_bool(
+		"-run", false, "After building, also run the output.", "r");
 
 	if (!flag_parse(argc, argv)) {
 		usage(stderr);

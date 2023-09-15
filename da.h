@@ -49,7 +49,7 @@
 		(da)->count += amount;                                       \
 	} while (0);
 
-#define da_foreach(item, da)                        \
+#define da_foreach(item, da)                       \
 	for (typeof((da).items) item = (da).items; \
 	     item < (da).items + (da).count; item++)
 

@@ -7,20 +7,20 @@
 
 typedef da(char *) Line_Builder;
 
-#define lb_free(lb)								\
-	do {										\
-		da_foreach(line, lb)					\
-		{										\
-			free(*line);						\
-		}										\
+#define lb_free(lb)                  \
+	do {                         \
+		da_foreach(line, lb) \
+		{                    \
+			free(*line); \
+		}                    \
 	} while (0);
 
-#define lb_print(lb)							\
-	do {										\
-		da_foreach(line, lb)					\
-		{										\
-			printf("%s", *line);				\
-		}										\
+#define lb_print(lb)                         \
+	do {                                 \
+		da_foreach(line, lb)         \
+		{                            \
+			printf("%s", *line); \
+		}                            \
 	} while (0);
 
 /*
@@ -79,13 +79,13 @@ void insert_at(Line_Builder *target, Line_Builder *source, size_t location)
 		}
 		target->items =
 			realloc(target->items,
-					target->capacity * sizeof(*target->items));
+				target->capacity * sizeof(*target->items));
 		assert(target->items != NULL && "Could not reallocate memory");
 	}
 
 	memmove(target->items + location + source->count,
-			target->items + location,
-			(target->count - location) * sizeof(*target->items));
+		target->items + location,
+		(target->count - location) * sizeof(*target->items));
 	target->count += source->count;
 
 	memcpy(target->items + location, source->items,
@@ -98,7 +98,7 @@ void insert_at(Line_Builder *target, Line_Builder *source, size_t location)
 
 int main(void)
 {
-    Line_Builder target = {0};
+	Line_Builder target = { 0 };
 	read_to_dot(&target);
 	if (target.count < 2) {
 		fprintf(stderr, "Please provide more than 2 lines.");
@@ -106,7 +106,7 @@ int main(void)
 		return 1;
 	}
 
-    Line_Builder source = {0};
+	Line_Builder source = { 0 };
 	read_to_dot(&source);
 	if (source.count < 1) {
 		fprintf(stderr, "Please provide at least one line.");
@@ -115,10 +115,10 @@ int main(void)
 		return 1;
 	}
 
-    insert_at(&target, &source, 2);
+	insert_at(&target, &source, 2);
 
-    lb_print(target);
-    lb_free(target);
+	lb_print(target);
+	lb_free(target);
 
-    return 0;
+	return 0;
 }
