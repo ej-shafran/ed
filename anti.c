@@ -17,7 +17,7 @@ void set_debug_info(Cmd *cmd)
 
 void set_warnings(Cmd *cmd)
 {
-	cmd_append(cmd, "-Wall", "-Wpedantic");
+	cmd_append(cmd, "-Wall", "-Wpedantic", "-Werror");
 }
 
 void ensure_dir(const char *dirpath)
