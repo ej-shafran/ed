@@ -87,7 +87,7 @@ void cmd_append_null(Cmd *cmd, ...)
 
 void cmd_render(Cmd cmd, String_Builder *output)
 {
-	da_foreach(const char *, item, cmd)
+	da_foreach(item, cmd)
 	{
 		sb_append_cstr(output, *item);
 		da_append(output, ' ');

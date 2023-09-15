@@ -7,14 +7,14 @@
 
 typedef da(char *) Line_Builder;
 
-#define lb_free(lb)                  \
-	da_foreach(char *, line, lb) \
-	{                            \
-		free(*line);         \
+#define lb_free(lb)          \
+	da_foreach(line, lb) \
+	{                    \
+		free(*line); \
 	}
 
 #define lb_print(lb)                 \
-	da_foreach(char *, line, lb) \
+	da_foreach(line, lb)         \
 	{                            \
 		printf("%s", *line); \
 	}
