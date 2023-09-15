@@ -58,7 +58,7 @@ void set_input(Cmd *cmd)
 
 void usage(FILE *stream)
 {
-	fprintf(stream, "USAGE: ./anti [OPTIONS]\n");
+	fprintf(stream, "USAGE: ./anti [OPTIONS]\nOPTIONS:\n");
 	flag_print_options(stream);
 }
 
