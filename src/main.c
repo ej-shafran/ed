@@ -1,7 +1,9 @@
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <string.h>
 
 #include "../da.h"
 
@@ -23,33 +25,47 @@ typedef da(char *) Line_Builder;
 		}                            \
 	} while (0);
 
-/*
- * `read_to_dot`
- *
- * Reads lines into `lb` from STDIN,
- * stopping when it reaches a line that is just one solitary ".".
- *
- * Returns `false` if `getline` fails;
- * `errno` is set to specify the cause.
- */
-bool read_to_dot(Line_Builder *lb)
+#define lb_print_n(lb)                                   \
+	do {                                             \
+		int i = 0;                               \
+		da_foreach(line, lb)                     \
+		{                                        \
+			printf("%d     %s", i++, *line); \
+		}                                        \
+	} while (0);
+
+typedef struct {
+	Line_Builder buffer;
+	size_t line;
+} Ed_Context;
+
+static Ed_Context ed_global_context = {
+	.buffer = { 0 },
+	.line = 0,
+};
+
+bool read_to_lb(Line_Builder *lb, FILE *file, char *condition)
 {
 	while (true) {
 		char *line = NULL;
 		size_t nsize = 0;
-		ssize_t nread = getline(&line, &nsize, stdin);
+		ssize_t nread = getline(&line, &nsize, file);
+
+		if (strcmp(condition, line) == 0)
+			return true;
+
 		if (nread < 0) {
 			free(line);
 			return false;
 		}
 
-		if (strcmp(line, ".\n") == 0)
-			break;
 		da_append(lb, line);
 	}
-
-	return true;
 }
+
+#define read_to_dot(lb) read_to_lb(lb, stdin, ".\n")
+
+#define read_file(lb, file) read_to_lb(lb, file, "")
 
 /*
  * `insert_at`
@@ -100,27 +116,24 @@ void insert_at(Line_Builder *target, Line_Builder *source, size_t location)
 
 int main(void)
 {
-	Line_Builder target = { 0 };
-	read_to_dot(&target);
-	if (target.count < 2) {
-		fprintf(stderr, "Please provide more than 2 lines.");
-		lb_free(target);
+	Ed_Context *context = &ed_global_context;
+	FILE *in = fopen("./src/main.c", "r");
+
+	if (in == NULL) {
+		fprintf(stderr, "Failed to open input file: %s\n",
+			strerror(errno));
 		return 1;
 	}
 
-	Line_Builder source = { 0 };
-	read_to_dot(&source);
-	if (source.count < 1) {
-		fprintf(stderr, "Please provide at least one line.");
-		lb_free(target);
-		lb_free(source);
+	bool result = read_file(&context->buffer, in);
+
+	if (!result) {
+		fprintf(stderr, "Failed to read input file: %s\n",
+			strerror(errno));
 		return 1;
 	}
 
-	insert_at(&target, &source, 2);
-
-	lb_print(target);
-	lb_free(target);
-
+	lb_print_n(context->buffer);
+	lb_free(context->buffer);
 	return 0;
 }
