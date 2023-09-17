@@ -24,8 +24,7 @@ int main(void)
 		bool success = ed_handle_cmd(line, &quit);
 		free(copy);
 		if (!success) {
-			// TODO: failed
-			fprintf(stderr, "FAILED\n");
+			ed_print_error();
 		}
 	}
 

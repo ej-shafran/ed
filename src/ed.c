@@ -5,14 +5,28 @@
 
 #include "ed.h"
 
+typedef enum {
+	ED_ERROR_NO_ERROR = 0,
+	ED_ERROR_INVALID_COMMAND,
+	ED_ERROR_INVALID_LOCATION,
+	ED_ERROR_INVALID_FILE,
+	ED_ERROR_UNKNOWN,
+} Ed_Error;
+
 // Globally-shared context within the application logic.
 typedef struct {
 	Ed_Line_Builder buffer;
 	size_t line;
 	char *filename;
+	Ed_Error error;
 } Ed_Context;
 
-Ed_Context ed_global_context = { .buffer = { 0 }, .line = 0, .filename = 0 };
+Ed_Context ed_global_context = {
+	.buffer = { 0 },
+	.line = 0,
+	.filename = 0,
+	.error = ED_ERROR_NO_ERROR,
+};
 
 bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
 {
@@ -235,6 +249,17 @@ bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
 	       (location.as_start == 0 && context->buffer.count == 0);
 }
 
+bool ensure_single_location(Ed_Location location, Ed_Location_Type loc_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (loc_type != ED_LOCATION_START && loc_type != ED_LOCATION_IMPLICIT)
+		return false;
+
+	return !out_of_buffer(context->buffer, location.as_start) ||
+	       (location.as_start == 0 && context->buffer.count == 0);
+}
+
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
@@ -244,53 +269,64 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
-	case ED_CMD_INVALID:
-		return false;
+	case ED_CMD_INVALID: {
+		if (ensure_location_start(location, loc_type)) {
+			context->line = location.as_start;
+		} else {
+			context->error = ED_ERROR_INVALID_COMMAND;
+			return false;
+		}
+	} break;
 	case ED_CMD_QUIT: {
 		*quit = true;
 		return true;
-	}
+	} break;
 	case ED_CMD_PRINT: {
 		// TODO: print using location
 		ed_lb_printn(context->buffer);
 	} break;
 	case ED_CMD_APPEND: {
-		if (!ensure_location_start(location, loc_type))
+		if (!ensure_single_location(location, loc_type)) {
+			context->error = ED_ERROR_INVALID_LOCATION;
 			return false;
-
-		Ed_Line_Builder lb = { 0 };
-		bool result = ed_lb_read_to_dot(&lb);
-		if (!result)
-			return false;
-
-		ed_lb_insert_at(&context->buffer, &lb, location.as_start + 1);
-	} break;
-	case ED_CMD_INSERT: {
-		if (!ensure_location_start(location, loc_type))
-			return false;
-
-		if (location.as_start >= context->buffer.count ||
-		    location.as_start < 1) {
-			if (!(location.as_start == 0 &&
-			      context->buffer.count == 0))
-				return false;
 		}
 
 		Ed_Line_Builder lb = { 0 };
 		bool result = ed_lb_read_to_dot(&lb);
-		if (!result)
+		if (!result) {
+			context->error = ED_ERROR_UNKNOWN;
 			return false;
+		}
+
+		ed_lb_insert_at(&context->buffer, &lb, location.as_start + 1);
+	} break;
+	case ED_CMD_INSERT: {
+		if (!ensure_single_location(location, loc_type)) {
+			context->error = ED_ERROR_INVALID_LOCATION;
+			return false;
+		}
+
+		Ed_Line_Builder lb = { 0 };
+		bool result = ed_lb_read_to_dot(&lb);
+		if (!result) {
+			context->error = ED_ERROR_UNKNOWN;
+			return false;
+		}
 
 		ed_lb_insert_at(&context->buffer, &lb, location.as_start);
 	} break;
 	case ED_CMD_CHANGE: {
-		if (!ensure_location_start(location, loc_type))
+		if (!ensure_single_location(location, loc_type)) {
+			context->error = ED_ERROR_INVALID_LOCATION;
 			return false;
+		}
 
 		Ed_Line_Builder lb = { 0 };
 		bool result = ed_lb_read_to_dot(&lb);
-		if (!result)
+		if (!result) {
+			context->error = ED_ERROR_UNKNOWN;
 			return false;
+		}
 
 		ed_lb_pop_and_insert(&context->buffer, &lb, location.as_start);
 	} break;
@@ -299,12 +335,18 @@ bool ed_handle_cmd(char *line, bool *quit)
 		context->filename = strdup(line);
 
 		FILE *f = fopen(line, "r");
-		if (f == NULL)
+		if (f == NULL) {
+			context->error = ED_ERROR_INVALID_FILE;
 			return false;
+		}
 
 		bool result = ed_lb_read_file(&context->buffer, f);
-		context->line = context->buffer.count > 0 ? context->buffer.count + 1 : 0;
+		context->line = context->buffer.count > 0 ?
+					context->buffer.count - 1 :
+					0;
 		fclose(f);
+		if (!result)
+			context->error = ED_ERROR_UNKNOWN;
 		return result;
 	} break;
 	case ED_CMD_WRITE: {
@@ -313,12 +355,17 @@ bool ed_handle_cmd(char *line, bool *quit)
 			context->filename = line;
 		}
 
-		if (context->filename == NULL || strlen(context->filename) == 0)
+		if (context->filename == NULL ||
+		    strlen(context->filename) == 0) {
+			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
+		}
 
 		FILE *f = fopen(context->filename, "w");
-		if (f == NULL)
+		if (f == NULL) {
+			context->error = ED_ERROR_INVALID_FILE;
 			return false;
+		}
 
 		ed_lb_write_to_stream(context->buffer, f);
 		fclose(f);
@@ -333,4 +380,27 @@ void ed_cleanup()
 	Ed_Context *context = &ed_global_context;
 
 	ed_lb_free(context->buffer);
+}
+
+void ed_print_error()
+{
+	Ed_Context *context = &ed_global_context;
+
+	switch (context->error) {
+	case ED_ERROR_NO_ERROR: {
+		fprintf(stderr, "No error.\n");
+	} break;
+	case ED_ERROR_INVALID_COMMAND: {
+		fprintf(stderr, "Invalid command.\n");
+	} break;
+	case ED_ERROR_INVALID_FILE: {
+		fprintf(stderr, "Could not open file.\n");
+	} break;
+	case ED_ERROR_INVALID_LOCATION: {
+		fprintf(stderr, "Invalid location.\n");
+	} break;
+	default: {
+		fprintf(stderr, "Unknown error.\n");
+	} break;
+	}
 }

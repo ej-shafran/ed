@@ -105,6 +105,7 @@ typedef struct {
 typedef enum {
 	ED_LOCATION_START = 0,
 	ED_LOCATION_RANGE,
+	ED_LOCATION_IMPLICIT,
 	ED_LOCATION_INVALID
 } Ed_Location_Type;
 
@@ -135,5 +136,8 @@ bool ed_handle_cmd(char *line, bool *quit);
 
 // Clean up the global context.
 void ed_cleanup();
+
+// Print the last error that occured.
+void ed_print_error();
 
 #endif // ED_H_
