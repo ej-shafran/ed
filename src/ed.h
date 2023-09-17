@@ -14,6 +14,13 @@ typedef da(char *) Ed_Line_Builder;
 // Passing `""` as the condition will read until EOF.
 bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition);
 
+// Write all lines from `lb` into `stream`.
+#define ed_lb_write_to_stream(lb, file) \
+	da_foreach(line, lb)            \
+	{                               \
+		fputs(*line, file);     \
+	}
+
 // Insert the contents of `source` into `target` at index `location`,
 // pushing off the contents of `target` to make room.
 //
@@ -69,12 +76,24 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 		}                    \
 	} while (0);
 
+#define ed_lb_clear(lb)          \
+	do {                     \
+		ed_lb_free(lb);  \
+		lb.count = 0;    \
+		lb.items = NULL; \
+		lb.capacity = 0; \
+	} while (0);
+
 // COMMANDS
 
 typedef enum {
 	ED_CMD_APPEND = 0,
 	ED_CMD_INSERT,
 	ED_CMD_CHANGE,
+	ED_CMD_EDIT,
+	ED_CMD_WRITE,
+	ED_CMD_PRINT,
+	ED_CMD_QUIT,
 	ED_CMD_INVALID
 } Ed_Cmd_Type;
 
@@ -94,11 +113,6 @@ typedef union {
 	Ed_Range as_range;
 } Ed_Location;
 
-typedef struct {
-	Ed_Cmd_Type type;
-	Ed_Location location;
-} Ed_Cmd;
-
 // Parse a location from user input.
 //
 // Returns `ED_LOCATION_INVALID` upon failure.
@@ -109,20 +123,17 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location);
 // Parse a command type from user input.
 //
 // Returns `ED_CMD_INVALID` upon failure.
-Ed_Cmd_Type ed_parse_cmd_type(char *line);
+Ed_Cmd_Type ed_parse_cmd_type(char **line);
 
 // Parse a command from user input.
 //
 // Returns `false` upon failure, `true` upon success.
 // Sets `cmd` to the parsed command.
-bool ed_parse_cmd(char *line, Ed_Cmd* cmd);
+bool ed_handle_cmd(char *line, bool *quit);
 
 // CONTEXT
 
-// Globally-shared context within the application.
-typedef struct {
-	Ed_Line_Builder buffer;
-	size_t line;
-} Ed_Context;
+// Clean up the global context.
+void ed_cleanup();
 
 #endif // ED_H_

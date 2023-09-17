@@ -5,6 +5,15 @@
 
 #include "ed.h"
 
+// Globally-shared context within the application logic.
+typedef struct {
+	Ed_Line_Builder buffer;
+	size_t line;
+	char *filename;
+} Ed_Context;
+
+Ed_Context ed_global_context = { .buffer = { 0 }, .line = 0, .filename = 0 };
+
 bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
 {
 	while (true) {
@@ -55,10 +64,10 @@ void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
 	source->capacity = 0;
 }
 
-
-void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source, size_t location)
+void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
+			  size_t location)
 {
-    assert(location < target->count);
+	assert(location < target->count);
 
 	if (target->count + source->count - 1 > target->capacity) {
 		if (target->capacity == 0) {
@@ -73,9 +82,9 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source, size
 		assert(target->items != NULL && "Could not reallocate memory");
 	}
 
-    memmove(target->items + location + source->count,
-            target->items + location + 1,
-            (target->count - location - 1) * sizeof(*target->items));
+	memmove(target->items + location + source->count,
+		target->items + location + 1,
+		(target->count - location - 1) * sizeof(*target->items));
 	target->count += source->count;
 
 	memcpy(target->items + location, source->items,
@@ -88,6 +97,10 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source, size
 
 Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 {
+	Ed_Context *context = &ed_global_context;
+
+	Ed_Location_Type result;
+
 	char *c = *line;
 	bool any = false;
 
@@ -98,13 +111,32 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 		start += *c - '0';
 	}
 
-	if (!any)
-		return ED_LOCATION_INVALID;
+	if (!any) {
+		size_t last_line = context->buffer.count == 0 ?
+					   0 :
+					   context->buffer.count - 1;
+		if (*c == '.') {
+			start = context->line;
+			c += 1;
+		} else if (*c == '$') {
+			start = last_line;
+			c += 1;
+		} else if (*c == ',') {
+			location->as_range.start = 1;
+			location->as_range.end = last_line;
+			result = ED_LOCATION_RANGE;
+			goto defer;
+		} else {
+			location->as_start = context->line;
+			result = ED_LOCATION_START;
+			goto defer;
+		}
+	}
 
 	if (*c != ',') {
-		*line = c;
 		location->as_start = start;
-		return ED_LOCATION_START;
+		result = ED_LOCATION_START;
+		goto defer;
 	}
 
 	// remove ','
@@ -118,11 +150,187 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 		end += *c - '0';
 	}
 
-	if (!any)
-		return ED_LOCATION_INVALID;
+	if (!any) {
+		if (*c == '.') {
+			end = context->line;
+			c += 1;
+		} else if (*c == '$') {
+			end = context->buffer.count - 1;
+			c += 1;
+		} else {
+			return ED_LOCATION_INVALID;
+		}
+	}
 
-	*line = c;
 	location->as_range.start = start;
 	location->as_range.end = end;
-	return ED_LOCATION_RANGE;
+	result = ED_LOCATION_RANGE;
+	goto defer;
+
+defer:
+	*line = c;
+	return result;
+}
+
+char *ltrim(char *s)
+{
+	while (isspace(*s))
+		s++;
+	return s;
+}
+
+char *rtrim(char *s)
+{
+	char *back = s + strlen(s);
+	while (isspace(*--back))
+		;
+	*(back + 1) = '\0';
+	return s;
+}
+
+char *trim(char *s)
+{
+	return rtrim(ltrim(s));
+}
+
+Ed_Cmd_Type ed_parse_cmd_type(char **line)
+{
+	switch (*line[0]) {
+	case 'a':
+		return ED_CMD_APPEND;
+	case 'i':
+		return ED_CMD_INSERT;
+	case 'c':
+		return ED_CMD_CHANGE;
+	case 'e':
+		*line += 1;
+		*line = trim(*line);
+		return ED_CMD_EDIT;
+	case 'w':
+		*line += 1;
+		*line = trim(*line);
+		return ED_CMD_WRITE;
+	case 'p':
+		return ED_CMD_PRINT;
+	case 'q':
+		return ED_CMD_QUIT;
+	default:
+		return ED_CMD_INVALID;
+	}
+}
+
+bool out_of_buffer(Ed_Line_Builder buffer, size_t n)
+{
+	return n >= buffer.count || n < 1;
+}
+
+bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (loc_type != ED_LOCATION_START)
+		return false;
+
+	return !out_of_buffer(context->buffer, location.as_start) ||
+	       (location.as_start == 0 && context->buffer.count == 0);
+}
+
+bool ed_handle_cmd(char *line, bool *quit)
+{
+	Ed_Context *context = &ed_global_context;
+
+	Ed_Location location = { 0 };
+	Ed_Location_Type loc_type = ed_parse_location(&line, &location);
+
+	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
+	switch (cmd_type) {
+	case ED_CMD_INVALID:
+		return false;
+	case ED_CMD_QUIT: {
+		*quit = true;
+		return true;
+	}
+	case ED_CMD_PRINT: {
+		// TODO: print using location
+		ed_lb_printn(context->buffer);
+	} break;
+	case ED_CMD_APPEND: {
+		if (!ensure_location_start(location, loc_type))
+			return false;
+
+		Ed_Line_Builder lb = { 0 };
+		bool result = ed_lb_read_to_dot(&lb);
+		if (!result)
+			return false;
+
+		ed_lb_insert_at(&context->buffer, &lb, location.as_start + 1);
+	} break;
+	case ED_CMD_INSERT: {
+		if (!ensure_location_start(location, loc_type))
+			return false;
+
+		if (location.as_start >= context->buffer.count ||
+		    location.as_start < 1) {
+			if (!(location.as_start == 0 &&
+			      context->buffer.count == 0))
+				return false;
+		}
+
+		Ed_Line_Builder lb = { 0 };
+		bool result = ed_lb_read_to_dot(&lb);
+		if (!result)
+			return false;
+
+		ed_lb_insert_at(&context->buffer, &lb, location.as_start);
+	} break;
+	case ED_CMD_CHANGE: {
+		if (!ensure_location_start(location, loc_type))
+			return false;
+
+		Ed_Line_Builder lb = { 0 };
+		bool result = ed_lb_read_to_dot(&lb);
+		if (!result)
+			return false;
+
+		ed_lb_pop_and_insert(&context->buffer, &lb, location.as_start);
+	} break;
+	case ED_CMD_EDIT: {
+		// TODO: do we need strdup here?
+		context->filename = strdup(line);
+
+		FILE *f = fopen(line, "r");
+		if (f == NULL)
+			return false;
+
+		bool result = ed_lb_read_file(&context->buffer, f);
+		context->line = context->buffer.count > 0 ? context->buffer.count + 1 : 0;
+		fclose(f);
+		return result;
+	} break;
+	case ED_CMD_WRITE: {
+		if (strlen(line) != 0) {
+			ed_lb_clear(context->buffer);
+			context->filename = line;
+		}
+
+		if (context->filename == NULL || strlen(context->filename) == 0)
+			return false;
+
+		FILE *f = fopen(context->filename, "w");
+		if (f == NULL)
+			return false;
+
+		ed_lb_write_to_stream(context->buffer, f);
+		fclose(f);
+	} break;
+	}
+
+	return true;
+}
+
+void ed_cleanup()
+{
+	Ed_Context *context = &ed_global_context;
+
+	ed_lb_free(context->buffer);
 }
