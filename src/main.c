@@ -30,7 +30,7 @@ typedef da(char *) Line_Builder;
 		int i = 0;                               \
 		da_foreach(line, lb)                     \
 		{                                        \
-			printf("%d     %s", i++, *line); \
+			printf("%d     %s", (i++) + 1, *line); \
 		}                                        \
 	} while (0);
 
