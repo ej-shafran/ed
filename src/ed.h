@@ -94,6 +94,9 @@ typedef enum {
 	ED_CMD_WRITE,
 	ED_CMD_PRINT,
 	ED_CMD_QUIT,
+	ED_CMD_LAST_ERR,
+	ED_CMD_TOGGLE_PROMPT,
+	ED_CMD_TOGGLE_ERR,
 	ED_CMD_INVALID
 } Ed_Cmd_Type;
 
@@ -105,7 +108,6 @@ typedef struct {
 typedef enum {
 	ED_LOCATION_START = 0,
 	ED_LOCATION_RANGE,
-	ED_LOCATION_IMPLICIT,
 	ED_LOCATION_INVALID
 } Ed_Location_Type;
 
@@ -137,7 +139,13 @@ bool ed_handle_cmd(char *line, bool *quit);
 // Clean up the global context.
 void ed_cleanup();
 
+// Whether `H` mode is active.
+bool ed_should_print_error();
+
 // Print the last error that occured.
 void ed_print_error();
+
+// Get line after printint prompt.
+ssize_t ed_getline(char **lineptr, size_t *n, FILE *stream);
 
 #endif // ED_H_

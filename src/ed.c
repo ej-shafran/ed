@@ -19,14 +19,16 @@ typedef struct {
 	size_t line;
 	char *filename;
 	Ed_Error error;
+	bool prompt;
+	bool should_print_error;
 } Ed_Context;
 
-Ed_Context ed_global_context = {
-	.buffer = { 0 },
-	.line = 0,
-	.filename = 0,
-	.error = ED_ERROR_NO_ERROR,
-};
+Ed_Context ed_global_context = { .buffer = { 0 },
+				 .line = 0,
+				 .filename = 0,
+				 .error = ED_ERROR_NO_ERROR,
+				 .prompt = false,
+				 .should_print_error = false };
 
 bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
 {
@@ -212,22 +214,28 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 	switch (*line[0]) {
 	case 'a':
 		return ED_CMD_APPEND;
-	case 'i':
-		return ED_CMD_INSERT;
 	case 'c':
 		return ED_CMD_CHANGE;
 	case 'e':
 		*line += 1;
 		*line = trim(*line);
 		return ED_CMD_EDIT;
+	case 'h':
+		return ED_CMD_LAST_ERR;
+	case 'H':
+		return ED_CMD_TOGGLE_ERR;
+	case 'i':
+		return ED_CMD_INSERT;
+	case 'p':
+		return ED_CMD_PRINT;
+	case 'P':
+		return ED_CMD_TOGGLE_PROMPT;
+	case 'q':
+		return ED_CMD_QUIT;
 	case 'w':
 		*line += 1;
 		*line = trim(*line);
 		return ED_CMD_WRITE;
-	case 'p':
-		return ED_CMD_PRINT;
-	case 'q':
-		return ED_CMD_QUIT;
 	default:
 		return ED_CMD_INVALID;
 	}
@@ -249,17 +257,6 @@ bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
 	       (location.as_start == 0 && context->buffer.count == 0);
 }
 
-bool ensure_single_location(Ed_Location location, Ed_Location_Type loc_type)
-{
-	Ed_Context *context = &ed_global_context;
-
-	if (loc_type != ED_LOCATION_START && loc_type != ED_LOCATION_IMPLICIT)
-		return false;
-
-	return !out_of_buffer(context->buffer, location.as_start) ||
-	       (location.as_start == 0 && context->buffer.count == 0);
-}
-
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
@@ -270,11 +267,14 @@ bool ed_handle_cmd(char *line, bool *quit)
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
 	case ED_CMD_INVALID: {
-		if (ensure_location_start(location, loc_type)) {
-			context->line = location.as_start;
-		} else {
+		if (loc_type != ED_LOCATION_START) {
 			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
+		} else if (out_of_buffer(context->buffer, location.as_start)) {
+			context->error = ED_ERROR_INVALID_LOCATION;
+			return false;
+		} else {
+			context->line = location.as_start;
 		}
 	} break;
 	case ED_CMD_QUIT: {
@@ -286,7 +286,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		ed_lb_printn(context->buffer);
 	} break;
 	case ED_CMD_APPEND: {
-		if (!ensure_single_location(location, loc_type)) {
+		if (!ensure_location_start(location, loc_type)) {
 			context->error = ED_ERROR_INVALID_LOCATION;
 			return false;
 		}
@@ -301,7 +301,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		ed_lb_insert_at(&context->buffer, &lb, location.as_start + 1);
 	} break;
 	case ED_CMD_INSERT: {
-		if (!ensure_single_location(location, loc_type)) {
+		if (!ensure_location_start(location, loc_type)) {
 			context->error = ED_ERROR_INVALID_LOCATION;
 			return false;
 		}
@@ -316,7 +316,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		ed_lb_insert_at(&context->buffer, &lb, location.as_start);
 	} break;
 	case ED_CMD_CHANGE: {
-		if (!ensure_single_location(location, loc_type)) {
+		if (!ensure_location_start(location, loc_type)) {
 			context->error = ED_ERROR_INVALID_LOCATION;
 			return false;
 		}
@@ -370,6 +370,18 @@ bool ed_handle_cmd(char *line, bool *quit)
 		ed_lb_write_to_stream(context->buffer, f);
 		fclose(f);
 	} break;
+	case ED_CMD_LAST_ERR: {
+		ed_print_error();
+		return true;
+	} break;
+	case ED_CMD_TOGGLE_PROMPT: {
+		context->prompt = !context->prompt;
+		return true;
+	} break;
+	case ED_CMD_TOGGLE_ERR: {
+		context->should_print_error = !context->should_print_error;
+		return true;
+	} break;
 	}
 
 	return true;
@@ -380,6 +392,13 @@ void ed_cleanup()
 	Ed_Context *context = &ed_global_context;
 
 	ed_lb_free(context->buffer);
+}
+
+bool ed_should_print_error()
+{
+	Ed_Context *context = &ed_global_context;
+
+	return context->should_print_error;
 }
 
 void ed_print_error()
@@ -403,4 +422,14 @@ void ed_print_error()
 		fprintf(stderr, "Unknown error.\n");
 	} break;
 	}
+}
+
+ssize_t ed_getline(char **lineptr, size_t *n, FILE *stream)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (context->prompt)
+		printf("*");
+
+	return getline(lineptr, n, stream);
 }
