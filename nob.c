@@ -65,7 +65,7 @@ bool build()
 	// TODO: add Windows support?
 	nob_cmd_append(&cmd, "gcc");
 	nob_cmd_append(&cmd,"-ggdb");
-	nob_cmd_append(&cmd, "-Wall", "-Wpedantic", "-Werror");
+	nob_cmd_append(&cmd, "-Wall", "-Wpedantic", "-Wextra", "-Werror");
 	nob_cmd_append(&cmd, "-o", "./build/main");
 	nob_cmd_append(&cmd, "./src/main.c", "./src/ed.c");
 	bool result = nob_cmd_run_sync(cmd);

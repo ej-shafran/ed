@@ -137,18 +137,15 @@ Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 	}
 
 	if (!any) {
-		size_t last_line = context->buffer.count == 0 ?
-					   0 :
-					   context->buffer.count - 1;
 		if (*c == '.') {
 			start = context->line;
 			c += 1;
 		} else if (*c == '$') {
-			start = last_line;
+			start = context->buffer.count;
 			c += 1;
 		} else if (*c == ',') {
 			address->as_range.start = 1;
-			address->as_range.end = last_line;
+			address->as_range.end = context->buffer.count;
 			c += 1;
 			result = ED_ADDRESS_RANGE;
 			goto defer;
@@ -274,7 +271,9 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 
 bool out_of_buffer(Ed_Line_Builder buffer, size_t n)
 {
-	return n >= buffer.count || (n < 1 && !(n == 0 && buffer.count == 0));
+	if (n == 0 && buffer.count == 0)
+		return true;
+	return n > buffer.count || n < 1;
 }
 
 bool address_out_of_range(Ed_Address address, Ed_Address_Type type)
@@ -391,7 +390,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 		ed_lb_insert_at(&context->buffer, &lb, address.as_start);
 	} break;
 	case ED_CMD_INSERT: {
-		if (!ensure_address_start(address, address_type)) {
+		if (!ensure_address_start(address, address_type) &&
+		    address.as_start != 0) {
 			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		}
@@ -403,10 +403,13 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_insert_at(&context->buffer, &lb, address.as_start - 1);
+		size_t line = address.as_start > 0 ? address.as_start - 1 : 0;
+		context->line = line + lb.count;
+		ed_lb_insert_at(&context->buffer, &lb, line);
+		free(lb.items);
 	} break;
 	case ED_CMD_CHANGE: {
-		if (!ensure_address_start(address, address_type)) {
+		if (address_out_of_range(address, address_type)) {
 			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		}
@@ -418,11 +421,31 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		da_append(&context->yank_register,
-			  strdup(context->buffer.items[address.as_start - 1]));
-		ed_lb_pop_and_insert(&context->buffer, &lb,
-				     address.as_start - 1);
-		free(lb.items);
+		if (address_type == ED_ADDRESS_START) {
+			da_append(&context->yank_register,
+				  strdup(context->buffer
+						 .items[address.as_start - 1]));
+			ed_lb_pop_and_insert(&context->buffer, &lb,
+					     address.as_start - 1);
+			free(lb.items);
+		} else {
+			if (context->yank_register.items != NULL) {
+				ed_lb_clear(context->yank_register);
+			}
+
+			size_t index = address.as_range.start - 1;
+			da_foreach(line, context->buffer)
+			{
+				index += 1;
+				if (index < address.as_range.end) {
+					da_append(&context->yank_register,
+						  strdup(*line));
+					ed_lb_pop(&context->buffer, index);
+				}
+			}
+			ed_lb_insert_at(&context->buffer, &lb,
+					address.as_range.start);
+		}
 	} break;
 	case ED_CMD_DELETE: {
 		if (address_out_of_range(address, address_type)) {
@@ -474,7 +497,6 @@ bool ed_handle_cmd(char *line, bool *quit)
 		free(tmp.items);
 	} break;
 	case ED_CMD_EDIT: {
-		// TODO: do we need strdup here?
 		context->filename = strdup(line);
 
 		FILE *f = fopen(line, "r");
@@ -494,8 +516,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 	} break;
 	case ED_CMD_WRITE: {
 		if (strlen(line) != 0) {
-			ed_lb_clear(context->buffer);
-			context->filename = line;
+			free(context->filename);
+			context->filename = strdup(line);
 		}
 
 		if (context->filename == NULL ||

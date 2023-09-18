@@ -15,10 +15,12 @@ typedef da(char *) Ed_Line_Builder;
 bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition);
 
 // Write all lines from `lb` into `stream`.
-#define ed_lb_write_to_stream(lb, file) \
-	da_foreach(line, lb)            \
-	{                               \
-		fputs(*line, file);     \
+#define ed_lb_write_to_stream(lb, file)          \
+	da_foreach(line, lb)                     \
+	{                                        \
+		int result = fputs(*line, file); \
+		if (result < 0)                  \
+			break;                   \
 	}
 
 // Insert the contents of `source` into `target` at index `address`,
@@ -44,7 +46,7 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 // Print lines from `lb` into `stream`
 #define ed_lb_fprint(stream, lb, start, end)                  \
 	do {                                                  \
-		int i = 0;                                    \
+		size_t i = 0;                                    \
 		da_foreach(line, lb)                          \
 		{                                             \
 			i += 1;                               \
@@ -59,12 +61,12 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 // Print line numbers from `lb` into `stream`
 #define ed_lb_fnum(stream, lb, start, end)                  \
 	do {                                                \
-		int i = 0;                                  \
+		size_t i = 0;                                  \
 		da_foreach(line, lb)                        \
 		{                                           \
 			i += 1;                             \
 			if (i >= start && i <= end)         \
-				fprintf(stream, "%d\n", i); \
+				fprintf(stream, "%zu\n", i); \
 		}                                           \
 	} while (0);
 
@@ -74,12 +76,12 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 // Print lines and their line numbers from `lb` into `stream`
 #define ed_lb_fprintn(stream, lb, start, end)                           \
 	do {                                                            \
-		int i = 0;                                              \
+		size_t i = 0;                                              \
 		da_foreach(line, lb)                                    \
 		{                                                       \
 			i += 1;                                         \
 			if (i >= start && i <= end)                     \
-				fprintf(stream, "%d     %s", i, *line); \
+				fprintf(stream, "%zu     %s", i, *line); \
 		}                                                       \
 	} while (0);
 
