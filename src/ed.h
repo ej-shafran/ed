@@ -23,17 +23,16 @@ bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition);
 
 // Insert the contents of `source` into `target` at index `address`,
 // pushing off the contents of `target` to make room.
-//
-// `source` is emptied and cannot be used/freed after this call.
 void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
 		     size_t address);
 
 // Insert the contents of `source` into `target` at index `address`,
 // while removing the line at `address` from the target.
-//
-// `source` is emptied and cannot be used/freed after this call.
 void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 			  size_t address);
+
+// Remove the line at `address` from `target`.
+void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 
 // Wrapper around `ed_lb_read_from_stream` that reads lines from STDIN
 // until a line with just `"."` is encountered.
@@ -58,15 +57,15 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 #define ed_lb_print(lb, start, end) ed_lb_fprint(stdout, lb, start, end)
 
 // Print line numbers from `lb` into `stream`
-#define ed_lb_fnum(stream, lb, start, end)                \
-	do {                                              \
-		int i = 0;                                \
-		da_foreach(line, lb)                      \
-		{                                         \
-			i += 1;                           \
-			if (i >= start && i <= end)       \
+#define ed_lb_fnum(stream, lb, start, end)                  \
+	do {                                                \
+		int i = 0;                                  \
+		da_foreach(line, lb)                        \
+		{                                           \
+			i += 1;                             \
+			if (i >= start && i <= end)         \
 				fprintf(stream, "%d\n", i); \
-		}                                         \
+		}                                           \
 	} while (0);
 
 // Wrapper around `ed_lb_fnum` which prints to STDOUT.
@@ -88,12 +87,14 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 #define ed_lb_printn(lb, start, end) ed_lb_fprintn(stdout, lb, start, end)
 
 // Free the allocated pointers in `lb`.
-#define ed_lb_free(lb)               \
-	do {                         \
-		da_foreach(line, lb) \
-		{                    \
-			free(*line); \
-		}                    \
+#define ed_lb_free(lb)                  \
+	do {                            \
+		da_foreach(line, lb)    \
+		{                       \
+			free(*line);    \
+		}                       \
+		if (lb.items != NULL)   \
+			free(lb.items); \
 	} while (0);
 
 #define ed_lb_clear(lb)          \
@@ -110,6 +111,8 @@ typedef enum {
 	ED_CMD_APPEND = 0,
 	ED_CMD_INSERT,
 	ED_CMD_CHANGE,
+	ED_CMD_DELETE,
+	ED_CMD_PUT,
 	ED_CMD_EDIT,
 	ED_CMD_WRITE,
 	ED_CMD_NUM,

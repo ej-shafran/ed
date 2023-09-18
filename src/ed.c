@@ -18,6 +18,7 @@ typedef struct {
 	Ed_Line_Builder buffer;
 	size_t line;
 	char *filename;
+	Ed_Line_Builder yank_register;
 	Ed_Error error;
 	bool prompt;
 	bool should_print_error;
@@ -25,6 +26,7 @@ typedef struct {
 
 Ed_Context ed_global_context = { .buffer = { 0 },
 				 .line = 0,
+				 .yank_register = { 0 },
 				 .filename = 0,
 				 .error = ED_ERROR_NO_ERROR,
 				 .prompt = false,
@@ -37,12 +39,15 @@ bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
 		size_t nsize = 0;
 		ssize_t nread = getline(&line, &nsize, file);
 
-		if (strcmp(line, condition) == 0)
-			return true;
-
 		if (nread < 1) {
+			if (line != NULL)
+				free(line);
+			return strlen(condition) == 0;
+		}
+
+		if (strcmp(line, condition) == 0) {
 			free(line);
-			return false;
+			return true;
 		}
 
 		da_append(lb, line);
@@ -74,10 +79,6 @@ void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
 
 	memcpy(target->items + address, source->items,
 	       source->count * sizeof(source->items));
-
-	source->items = NULL;
-	source->count = 0;
-	source->capacity = 0;
 }
 
 void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
@@ -103,12 +104,20 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 		(target->count - address - 1) * sizeof(*target->items));
 	target->count += source->count;
 
+	free(target->items[address]);
 	memcpy(target->items + address, source->items,
 	       source->count * sizeof(source->items));
+}
 
-	source->items = NULL;
-	source->count = 0;
-	source->capacity = 0;
+void ed_lb_pop(Ed_Line_Builder *target, size_t address)
+{
+	assert(address < target->count);
+
+	free(target->items[address]);
+
+	memmove(target->items + address, target->items + address + 1,
+		(target->count - address - 1) * sizeof(*target->items));
+	target->count -= 1;
 }
 
 Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
@@ -229,6 +238,8 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		return ED_CMD_APPEND;
 	case 'c':
 		return ED_CMD_CHANGE;
+	case 'd':
+		return ED_CMD_DELETE;
 	case 'e':
 		*line += 1;
 		*line = trim(*line);
@@ -254,6 +265,8 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		*line += 1;
 		*line = trim(*line);
 		return ED_CMD_WRITE;
+	case 'x':
+		return ED_CMD_PUT;
 	default:
 		return ED_CMD_INVALID;
 	}
@@ -317,6 +330,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		}
 	} break;
 	case ED_CMD_QUIT: {
+		// TODO: warning
 		*quit = true;
 		return true;
 	} break;
@@ -340,7 +354,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 		}
 
 		if (address_type == ED_ADDRESS_START) {
-			printf("%s", context->buffer.items[address.as_start - 1]);
+			printf("%s",
+			       context->buffer.items[address.as_start - 1]);
 		} else {
 			ed_lb_print(context->buffer, address.as_range.start,
 				    address.as_range.end);
@@ -403,7 +418,60 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_pop_and_insert(&context->buffer, &lb, address.as_start - 1);
+		da_append(&context->yank_register,
+			  strdup(context->buffer.items[address.as_start - 1]));
+		ed_lb_pop_and_insert(&context->buffer, &lb,
+				     address.as_start - 1);
+		free(lb.items);
+	} break;
+	case ED_CMD_DELETE: {
+		if (address_out_of_range(address, address_type)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
+			return false;
+		}
+
+		if (address_type == ED_ADDRESS_START) {
+			if (context->yank_register.items != NULL) {
+				ed_lb_clear(context->yank_register);
+			}
+
+			da_append(&context->yank_register,
+				  strdup(context->buffer
+						 .items[address.as_start - 1]));
+			ed_lb_pop(&context->buffer, address.as_start - 1);
+		} else {
+			if (context->yank_register.items != NULL) {
+				ed_lb_clear(context->yank_register);
+			}
+			size_t index = address.as_range.start - 1;
+			da_foreach(line, context->buffer)
+			{
+				index += 1;
+				if (index < address.as_range.end) {
+					da_append(&context->yank_register,
+						  strdup(*line));
+					ed_lb_pop(&context->buffer, index);
+				}
+			}
+		}
+	} break;
+	case ED_CMD_PUT: {
+		if (address_out_of_range(address, address_type)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
+			return false;
+		}
+
+		Ed_Line_Builder tmp = { 0 };
+		da_foreach(line, context->yank_register)
+		{
+			da_append(&tmp, strdup(*line));
+		}
+
+		ed_lb_insert_at(&context->buffer, &tmp,
+				address_type == ED_ADDRESS_START ?
+					address.as_start - 1 :
+					address.as_range.end - 1);
+		free(tmp.items);
 	} break;
 	case ED_CMD_EDIT: {
 		// TODO: do we need strdup here?
@@ -466,7 +534,9 @@ void ed_cleanup()
 {
 	Ed_Context *context = &ed_global_context;
 
+	free(context->filename);
 	ed_lb_free(context->buffer);
+	ed_lb_free(context->yank_register);
 }
 
 bool ed_should_print_error()

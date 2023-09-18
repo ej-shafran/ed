@@ -17,9 +17,7 @@ int main(void)
 		ssize_t nread = ed_getline(&line, &nsize, stdin);
 		char *copy = line;
 		if (nread < 0) {
-			// TODO: failed
-			fprintf(stderr, "COULD NOT READ\n");
-			continue;
+			return 1;
 		}
 		bool success = ed_handle_cmd(line, &quit);
 		free(copy);
