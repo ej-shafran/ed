@@ -8,7 +8,7 @@
 typedef enum {
 	ED_ERROR_NO_ERROR = 0,
 	ED_ERROR_INVALID_COMMAND,
-	ED_ERROR_INVALID_LOCATION,
+	ED_ERROR_INVALID_ADDRESS,
 	ED_ERROR_INVALID_FILE,
 	ED_ERROR_UNKNOWN,
 } Ed_Error;
@@ -50,9 +50,9 @@ bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
 }
 
 void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
-		     size_t location)
+		     size_t address)
 {
-	assert(location <= target->count);
+	assert(address <= target->count);
 
 	if (target->count + source->count > target->capacity) {
 		if (target->capacity == 0) {
@@ -67,12 +67,12 @@ void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
 		assert(target->items != NULL && "Could not reallocate memory");
 	}
 
-	memmove(target->items + location + source->count,
-		target->items + location,
-		(target->count - location) * sizeof(*target->items));
+	memmove(target->items + address + source->count,
+		target->items + address,
+		(target->count - address) * sizeof(*target->items));
 	target->count += source->count;
 
-	memcpy(target->items + location, source->items,
+	memcpy(target->items + address, source->items,
 	       source->count * sizeof(source->items));
 
 	source->items = NULL;
@@ -81,9 +81,9 @@ void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
 }
 
 void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
-			  size_t location)
+			  size_t address)
 {
-	assert(location < target->count);
+	assert(address < target->count);
 
 	if (target->count + source->count - 1 > target->capacity) {
 		if (target->capacity == 0) {
@@ -98,12 +98,12 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 		assert(target->items != NULL && "Could not reallocate memory");
 	}
 
-	memmove(target->items + location + source->count,
-		target->items + location + 1,
-		(target->count - location - 1) * sizeof(*target->items));
+	memmove(target->items + address + source->count,
+		target->items + address + 1,
+		(target->count - address - 1) * sizeof(*target->items));
 	target->count += source->count;
 
-	memcpy(target->items + location, source->items,
+	memcpy(target->items + address, source->items,
 	       source->count * sizeof(source->items));
 
 	source->items = NULL;
@@ -111,11 +111,11 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 	source->capacity = 0;
 }
 
-Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
+Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	Ed_Location_Type result;
+	Ed_Address_Type result;
 
 	char *c = *line;
 	bool any = false;
@@ -138,21 +138,21 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 			start = last_line;
 			c += 1;
 		} else if (*c == ',') {
-			location->as_range.start = 1;
-			location->as_range.end = last_line;
+			address->as_range.start = 1;
+			address->as_range.end = last_line;
 			c += 1;
-			result = ED_LOCATION_RANGE;
+			result = ED_ADDRESS_RANGE;
 			goto defer;
 		} else {
-			location->as_start = context->line;
-			result = ED_LOCATION_START;
+			address->as_start = context->line;
+			result = ED_ADDRESS_START;
 			goto defer;
 		}
 	}
 
 	if (*c != ',') {
-		location->as_start = start;
-		result = ED_LOCATION_START;
+		address->as_start = start;
+		result = ED_ADDRESS_START;
 		goto defer;
 	}
 
@@ -175,25 +175,25 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 			end = context->buffer.count - 1;
 			c += 1;
 		} else {
-			result = ED_LOCATION_INVALID;
+			result = ED_ADDRESS_INVALID;
 			goto defer;
 		}
 	}
 
 	if (start > end) {
-		result = ED_LOCATION_INVALID;
+		result = ED_ADDRESS_INVALID;
 		goto defer;
 	}
 
 	if (start == end) {
-		location->as_start = start;
-		result = ED_LOCATION_START;
+		address->as_start = start;
+		result = ED_ADDRESS_START;
 		goto defer;
 	}
 
-	location->as_range.start = start;
-	location->as_range.end = end;
-	result = ED_LOCATION_RANGE;
+	address->as_range.start = start;
+	address->as_range.end = end;
+	result = ED_ADDRESS_RANGE;
 	goto defer;
 
 defer:
@@ -259,34 +259,34 @@ bool out_of_buffer(Ed_Line_Builder buffer, size_t n)
 	return n >= buffer.count || (n < 1 && !(n == 0 && buffer.count == 0));
 }
 
-bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
+bool ensure_address_start(Ed_Address address, Ed_Address_Type loc_type)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (loc_type != ED_LOCATION_START)
+	if (loc_type != ED_ADDRESS_START)
 		return false;
 
-	return !out_of_buffer(context->buffer, location.as_start);
+	return !out_of_buffer(context->buffer, address.as_start);
 }
 
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
 
-	Ed_Location location = { 0 };
-	Ed_Location_Type loc_type = ed_parse_location(&line, &location);
+	Ed_Address address = { 0 };
+	Ed_Address_Type loc_type = ed_parse_address(&line, &address);
 
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
 	case ED_CMD_INVALID: {
-		if (loc_type != ED_LOCATION_START) {
+		if (loc_type != ED_ADDRESS_START) {
 			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
-		} else if (out_of_buffer(context->buffer, location.as_start)) {
-			context->error = ED_ERROR_INVALID_LOCATION;
+		} else if (out_of_buffer(context->buffer, address.as_start)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		} else {
-			context->line = location.as_start;
+			context->line = address.as_start;
 		}
 	} break;
 	case ED_CMD_QUIT: {
@@ -294,27 +294,27 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return true;
 	} break;
 	case ED_CMD_PRINT: {
-		if (loc_type == ED_LOCATION_START) {
-			if (out_of_buffer(context->buffer, location.as_start)) {
-				context->error = ED_ERROR_INVALID_LOCATION;
+		if (loc_type == ED_ADDRESS_START) {
+			if (out_of_buffer(context->buffer, address.as_start)) {
+				context->error = ED_ERROR_INVALID_ADDRESS;
 				return false;
 			}
-			printf("%s", context->buffer.items[location.as_start]);
+			printf("%s", context->buffer.items[address.as_start]);
 		} else {
 			if (out_of_buffer(context->buffer,
-					  location.as_range.start) ||
+					  address.as_range.start) ||
 			    out_of_buffer(context->buffer,
-					  location.as_range.end)) {
-				context->error = ED_ERROR_INVALID_LOCATION;
+					  address.as_range.end)) {
+				context->error = ED_ERROR_INVALID_ADDRESS;
 				return false;
 			}
-			ed_lb_print(context->buffer, location.as_range.start,
-				    location.as_range.end);
+			ed_lb_print(context->buffer, address.as_range.start,
+				    address.as_range.end);
 		}
 	} break;
 	case ED_CMD_APPEND: {
-		if (!ensure_location_start(location, loc_type)) {
-			context->error = ED_ERROR_INVALID_LOCATION;
+		if (!ensure_address_start(address, loc_type)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		}
 
@@ -325,11 +325,11 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_insert_at(&context->buffer, &lb, location.as_start + 1);
+		ed_lb_insert_at(&context->buffer, &lb, address.as_start + 1);
 	} break;
 	case ED_CMD_INSERT: {
-		if (!ensure_location_start(location, loc_type)) {
-			context->error = ED_ERROR_INVALID_LOCATION;
+		if (!ensure_address_start(address, loc_type)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		}
 
@@ -340,11 +340,11 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_insert_at(&context->buffer, &lb, location.as_start);
+		ed_lb_insert_at(&context->buffer, &lb, address.as_start);
 	} break;
 	case ED_CMD_CHANGE: {
-		if (!ensure_location_start(location, loc_type)) {
-			context->error = ED_ERROR_INVALID_LOCATION;
+		if (!ensure_address_start(address, loc_type)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		}
 
@@ -355,7 +355,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_pop_and_insert(&context->buffer, &lb, location.as_start);
+		ed_lb_pop_and_insert(&context->buffer, &lb, address.as_start);
 	} break;
 	case ED_CMD_EDIT: {
 		// TODO: do we need strdup here?
@@ -442,8 +442,8 @@ void ed_print_error()
 	case ED_ERROR_INVALID_FILE: {
 		fprintf(stderr, "Could not open file.\n");
 	} break;
-	case ED_ERROR_INVALID_LOCATION: {
-		fprintf(stderr, "Invalid location.\n");
+	case ED_ERROR_INVALID_ADDRESS: {
+		fprintf(stderr, "Invalid address.\n");
 	} break;
 	default: {
 		fprintf(stderr, "Unknown error.\n");

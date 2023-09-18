@@ -21,19 +21,19 @@ bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition);
 		fputs(*line, file);     \
 	}
 
-// Insert the contents of `source` into `target` at index `location`,
+// Insert the contents of `source` into `target` at index `address`,
 // pushing off the contents of `target` to make room.
 //
 // `source` is emptied and cannot be used/freed after this call.
 void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
-		     size_t location);
+		     size_t address);
 
-// Insert the contents of `source` into `target` at index `location`,
-// while removing the line at `location` from the target.
+// Insert the contents of `source` into `target` at index `address`,
+// while removing the line at `address` from the target.
 //
 // `source` is emptied and cannot be used/freed after this call.
 void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
-			  size_t location);
+			  size_t address);
 
 // Wrapper around `ed_lb_read_from_stream` that reads lines from STDIN
 // until a line with just `"."` is encountered.
@@ -111,22 +111,22 @@ typedef struct {
 } Ed_Range;
 
 typedef enum {
-	ED_LOCATION_START = 0,
-	ED_LOCATION_RANGE,
-	ED_LOCATION_INVALID
-} Ed_Location_Type;
+	ED_ADDRESS_START = 0,
+	ED_ADDRESS_RANGE,
+	ED_ADDRESS_INVALID
+} Ed_Address_Type;
 
 typedef union {
 	size_t as_start;
 	Ed_Range as_range;
-} Ed_Location;
+} Ed_Address;
 
-// Parse a location from user input.
+// Parse a address from user input.
 //
-// Returns `ED_LOCATION_INVALID` upon failure.
-// Sets `location` upon success, and `line` is updated to point to after the location.
-// The return value specifies which member of the union for `location` has been set.
-Ed_Location_Type ed_parse_location(char **line, Ed_Location *location);
+// Returns `ED_ADDRESS_INVALID` upon failure.
+// Sets `address` upon success, and `line` is updated to point to after the address.
+// The return value specifies which member of the union for `address` has been set.
+Ed_Address_Type ed_parse_address(char **line, Ed_Address *address);
 
 // Parse a command type from user input.
 //
