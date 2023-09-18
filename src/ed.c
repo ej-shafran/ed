@@ -140,6 +140,7 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 		} else if (*c == ',') {
 			location->as_range.start = 1;
 			location->as_range.end = last_line;
+			c += 1;
 			result = ED_LOCATION_RANGE;
 			goto defer;
 		} else {
@@ -174,8 +175,20 @@ Ed_Location_Type ed_parse_location(char **line, Ed_Location *location)
 			end = context->buffer.count - 1;
 			c += 1;
 		} else {
-			return ED_LOCATION_INVALID;
+			result = ED_LOCATION_INVALID;
+			goto defer;
 		}
+	}
+
+	if (start > end) {
+		result = ED_LOCATION_INVALID;
+		goto defer;
+	}
+
+	if (start == end) {
+		location->as_start = start;
+		result = ED_LOCATION_START;
+		goto defer;
 	}
 
 	location->as_range.start = start;
@@ -243,7 +256,7 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 
 bool out_of_buffer(Ed_Line_Builder buffer, size_t n)
 {
-	return n >= buffer.count || n < 1;
+	return n >= buffer.count || (n < 1 && !(n == 0 && buffer.count == 0));
 }
 
 bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
@@ -253,8 +266,7 @@ bool ensure_location_start(Ed_Location location, Ed_Location_Type loc_type)
 	if (loc_type != ED_LOCATION_START)
 		return false;
 
-	return !out_of_buffer(context->buffer, location.as_start) ||
-	       (location.as_start == 0 && context->buffer.count == 0);
+	return !out_of_buffer(context->buffer, location.as_start);
 }
 
 bool ed_handle_cmd(char *line, bool *quit)
@@ -282,8 +294,23 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return true;
 	} break;
 	case ED_CMD_PRINT: {
-		// TODO: print using location
-		ed_lb_printn(context->buffer);
+		if (loc_type == ED_LOCATION_START) {
+			if (out_of_buffer(context->buffer, location.as_start)) {
+				context->error = ED_ERROR_INVALID_LOCATION;
+				return false;
+			}
+			printf("%s", context->buffer.items[location.as_start]);
+		} else {
+			if (out_of_buffer(context->buffer,
+					  location.as_range.start) ||
+			    out_of_buffer(context->buffer,
+					  location.as_range.end)) {
+				context->error = ED_ERROR_INVALID_LOCATION;
+				return false;
+			}
+			ed_lb_print(context->buffer, location.as_range.start,
+				    location.as_range.end);
+		}
 	} break;
 	case ED_CMD_APPEND: {
 		if (!ensure_location_start(location, loc_type)) {

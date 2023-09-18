@@ -43,29 +43,34 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 #define ed_lb_read_file(lb, file) ed_lb_read_from_stream(lb, file, "")
 
 // Print lines from `lb` into `stream`
-#define ed_lb_fprint(stream, lb)                      \
-	do {                                          \
-		da_foreach(line, lb)                  \
-		{                                     \
-			fprintf(stream, "%s", *line); \
-		}                                     \
+#define ed_lb_fprint(stream, lb, start, end)                  \
+	do {                                                  \
+		int i = 0;                                    \
+		da_foreach(line, lb)                          \
+		{                                             \
+			i += 1;                               \
+			if (i >= start && i <= end)           \
+				fprintf(stream, "%s", *line); \
+		}                                             \
 	} while (0);
 
 // Wrapper around `ed_lb_fprint` which prints to STDOUT.
-#define ed_lb_print(lb) ed_lb_fprint(stdout, lb)
+#define ed_lb_print(lb, start, end) ed_lb_fprint(stdout, lb, start, end)
 
 // Print lines and their line numbers from `lb` into `stream`
-#define ed_lb_fprintn(stream, lb)                                       \
+#define ed_lb_fprintn(stream, lb, start, end)                           \
 	do {                                                            \
 		int i = 0;                                              \
 		da_foreach(line, lb)                                    \
 		{                                                       \
-			fprintf(stream, "%d     %s", (i++) + 1, *line); \
+			i += 1;                                         \
+			if (i >= start && i <= end)                     \
+				fprintf(stream, "%d     %s", i, *line); \
 		}                                                       \
 	} while (0);
 
 // Wrapper around `ed_lb_fprintn` which prints to STDOUT.
-#define ed_lb_printn(lb) ed_lb_fprintn(stdout, lb)
+#define ed_lb_printn(lb, start, end) ed_lb_fprintn(stdout, lb, start, end)
 
 // Free the allocated pointers in `lb`.
 #define ed_lb_free(lb)               \
