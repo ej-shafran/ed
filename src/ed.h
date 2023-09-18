@@ -57,6 +57,21 @@ void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
 // Wrapper around `ed_lb_fprint` which prints to STDOUT.
 #define ed_lb_print(lb, start, end) ed_lb_fprint(stdout, lb, start, end)
 
+// Print line numbers from `lb` into `stream`
+#define ed_lb_fnum(stream, lb, start, end)                \
+	do {                                              \
+		int i = 0;                                \
+		da_foreach(line, lb)                      \
+		{                                         \
+			i += 1;                           \
+			if (i >= start && i <= end)       \
+				fprintf(stream, "%d\n", i); \
+		}                                         \
+	} while (0);
+
+// Wrapper around `ed_lb_fnum` which prints to STDOUT.
+#define ed_lb_num(lb, start, end) ed_lb_fnum(stdout, lb, start, end)
+
 // Print lines and their line numbers from `lb` into `stream`
 #define ed_lb_fprintn(stream, lb, start, end)                           \
 	do {                                                            \
@@ -97,7 +112,9 @@ typedef enum {
 	ED_CMD_CHANGE,
 	ED_CMD_EDIT,
 	ED_CMD_WRITE,
+	ED_CMD_NUM,
 	ED_CMD_PRINT,
+	ED_CMD_PRINT_NUM,
 	ED_CMD_QUIT,
 	ED_CMD_LAST_ERR,
 	ED_CMD_TOGGLE_PROMPT,
