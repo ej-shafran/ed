@@ -258,14 +258,14 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
 
 	switch (type) {
 	case ED_ADDRESS_START: {
-		if (!allow_zero && address.as_start == 0)
-			return true;
+		if (address.as_start == 0)
+			return !allow_zero;
 		size_t start = line_to_index(address.as_start);
 		return !lb_contains(context->buffer, start);
 	} break;
 	case ED_ADDRESS_RANGE: {
-		if (!allow_zero && address.as_range.start == 0)
-			return true;
+		if (address.as_range.start == 0)
+			return !allow_zero;
 		size_t start = line_to_index(address.as_range.start);
 		size_t end = line_to_index(address.as_range.end);
 		if (end < start)
