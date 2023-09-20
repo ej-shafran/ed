@@ -6,6 +6,48 @@
 #include "./lb.h"
 #include "./ed.h"
 
+// STRING UTILS
+
+char *ltrim(char *s)
+{
+	while (isspace(*s))
+		s++;
+	return s;
+}
+
+char *rtrim(char *s)
+{
+	char *back = s + strlen(s);
+	while (isspace(*--back))
+		;
+	*(back + 1) = '\0';
+	return s;
+}
+
+char *trim(char *s)
+{
+	return rtrim(ltrim(s));
+}
+
+
+char *strappend(char *a, char *b)
+{
+	int sizea = strlen(a);
+	int sizeb = strlen(b);
+	int size = sizea + sizeb + 1;
+
+	char *s = calloc(size, sizeof(char));
+
+	for (int i = 0; i < sizea; ++i)
+		s[i] = a[i];
+
+	for (int i = 0; i <= sizeb; ++i)
+		s[sizea + i] = b[i];
+
+	return s;
+}
+
+
 // COMMANDS
 
 typedef enum {
@@ -43,6 +85,8 @@ typedef union {
 	Ed_Range as_range;
 } Ed_Address;
 
+#define line_to_index(line) ((line) == 0 ? 0 : (line)-1)
+
 typedef enum {
 	ED_ERROR_NO_ERROR = 0,
 	ED_ERROR_INVALID_COMMAND,
@@ -50,6 +94,8 @@ typedef enum {
 	ED_ERROR_INVALID_FILE,
 	ED_ERROR_UNKNOWN,
 } Ed_Error;
+
+// CONTEXT
 
 typedef struct {
 	Line_Builder buffer;
@@ -68,8 +114,6 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .error = ED_ERROR_NO_ERROR,
 				 .prompt = false,
 				 .should_print_error = false };
-
-#define line_to_index(line) ((line) == 0 ? 0 : (line)-1)
 
 // Parse a address from user input.
 //
@@ -163,27 +207,6 @@ defer:
 	return result;
 }
 
-char *ltrim(char *s)
-{
-	while (isspace(*s))
-		s++;
-	return s;
-}
-
-char *rtrim(char *s)
-{
-	char *back = s + strlen(s);
-	while (isspace(*--back))
-		;
-	*(back + 1) = '\0';
-	return s;
-}
-
-char *trim(char *s)
-{
-	return rtrim(ltrim(s));
-}
-
 // Parse a command type from user input.
 //
 // Returns `ED_CMD_INVALID` upon failure.
@@ -253,23 +276,6 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type)
 		exit(1);
 	} break;
 	}
-}
-
-char *strappend(char *a, char *b)
-{
-	int sizea = strlen(a);
-	int sizeb = strlen(b);
-	int size = sizea + sizeb + 1;
-
-	char *s = calloc(size, sizeof(char));
-
-	for (int i = 0; i < sizea; ++i)
-		s[i] = a[i];
-
-	for (int i = 0; i <= sizeb; ++i)
-		s[sizea + i] = b[i];
-
-	return s;
 }
 
 bool ensure_address_start(Ed_Address address, Ed_Address_Type address_type)
