@@ -120,6 +120,18 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address)
 	target->count -= 1;
 }
 
+void ed_lb_pop_range(Ed_Line_Builder *target, size_t start, size_t end)
+{
+	assert(end < target->count);
+
+	for (size_t i = start; i <= end; ++i)
+		free(target->items[i]);
+
+	memmove(target->items + start, target->items + end + 1,
+		(target->count - end - 1) * sizeof(*target->items));
+	target->count -= end - start + 1;
+}
+
 Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 {
 	Ed_Context *context = &ed_global_context;
@@ -247,6 +259,8 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		return ED_CMD_TOGGLE_ERR;
 	case 'i':
 		return ED_CMD_INSERT;
+	case 'j':
+		return ED_CMD_JOIN;
 	case 'n':
 		return ED_CMD_NUM;
 	case 'p':
@@ -296,6 +310,23 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type)
 		exit(1);
 	} break;
 	}
+}
+
+char *strappend(char *a, char *b)
+{
+	int sizea = strlen(a);
+	int sizeb = strlen(b);
+	int size = sizea + sizeb + 1;
+
+	char *s = calloc(size, sizeof(char));
+
+	for (int i = 0; i < sizea; ++i)
+		s[i] = a[i];
+
+	for (int i = 0; i <= sizeb; ++i)
+		s[sizea + i] = b[i];
+
+	return s;
 }
 
 bool ensure_address_start(Ed_Address address, Ed_Address_Type address_type)
@@ -466,16 +497,16 @@ bool ed_handle_cmd(char *line, bool *quit)
 			if (context->yank_register.items != NULL) {
 				ed_lb_clear(context->yank_register);
 			}
-			size_t index = address.as_range.start - 1;
-			da_foreach(line, context->buffer)
-			{
-				index += 1;
-				if (index < address.as_range.end) {
-					da_append(&context->yank_register,
-						  strdup(*line));
-					ed_lb_pop(&context->buffer, index);
-				}
+
+			size_t start = address.as_range.start;
+			size_t end = address.as_range.end;
+			for (size_t i = start - 1; i < end; ++i) {
+				da_append(&context->yank_register,
+					  strdup(context->buffer.items[i]));
 			}
+
+			ed_lb_pop_range(&context->buffer,
+					start > 0 ? start - 1 : 0, end - 1);
 		}
 	} break;
 	case ED_CMD_PUT: {
@@ -492,8 +523,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 		ed_lb_insert_at(&context->buffer, &tmp,
 				address_type == ED_ADDRESS_START ?
-					address.as_start - 1 :
-					address.as_range.end - 1);
+					address.as_start :
+					address.as_range.end);
 		free(tmp.items);
 	} break;
 	case ED_CMD_EDIT: {
@@ -534,6 +565,35 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 		ed_lb_write_to_stream(context->buffer, f);
 		fclose(f);
+	} break;
+	case ED_CMD_JOIN: {
+		size_t start, end;
+		if (address_type == ED_ADDRESS_START) {
+			start = address.as_start - 1;
+			end = start + 1;
+		} else {
+			start = address.as_range.start - 1;
+			end = address.as_range.end - 1;
+		}
+
+		if ((out_of_buffer(context->buffer, start) && start != 0) ||
+		    out_of_buffer(context->buffer, end)) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
+			return false;
+		}
+
+		for (size_t i = start + 1; i <= end; ++i) {
+			int len = strlen(context->buffer.items[start]);
+			context->buffer.items[start][len - 1] = '\0';
+
+			char *result =
+				strappend(context->buffer.items[start],
+					  context->buffer.items[i]);
+			free(context->buffer.items[start]);
+			context->buffer.items[start] = result;
+		}
+
+		ed_lb_pop_range(&context->buffer, start + 1, end);
 	} break;
 	case ED_CMD_LAST_ERR: {
 		ed_print_error();

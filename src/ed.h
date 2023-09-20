@@ -124,7 +124,8 @@ typedef enum {
 	ED_CMD_LAST_ERR,
 	ED_CMD_TOGGLE_PROMPT,
 	ED_CMD_TOGGLE_ERR,
-	ED_CMD_INVALID
+	ED_CMD_INVALID,
+	ED_CMD_JOIN,
 } Ed_Cmd_Type;
 
 typedef struct {
