@@ -377,7 +377,9 @@ bool ed_cmd_append(Ed_Address address, Ed_Address_Type address_type)
 		return false;
 	}
 
+	size_t amount = lb.count;
 	lb_insert(&context->buffer, &lb, address.as_start);
+	context->line = address.as_start + amount;
 	return true;
 }
 
