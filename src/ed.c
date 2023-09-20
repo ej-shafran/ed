@@ -288,6 +288,12 @@ bool ensure_address_start(Ed_Address address, Ed_Address_Type address_type)
 	size_t start = line_to_index(address.as_start);
 	return lb_contains(context->buffer, start);
 }
+
+bool ed_cmd_quit(bool *quit)
+{
+	// TODO: warning
+	*quit = true;
+	return true;
 }
 
 // API
@@ -313,9 +319,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		}
 	} break;
 	case ED_CMD_QUIT: {
-		// TODO: warning
-		*quit = true;
-		return true;
+		return ed_cmd_quit(quit);
 	} break;
 	case ED_CMD_NUM: {
 		if (address_out_of_range(address, address_type)) {
