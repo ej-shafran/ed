@@ -3,109 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "ed.h"
-
-// LINE BUILDER
-
-// Dynamic array of lines (nul-terminated with the '\n' at the end)
-typedef da(char *) Ed_Line_Builder;
-
-// Read lines from `stream` into `lb` until `condition` is met.
-// Passing `""` as the condition will read until EOF.
-bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition);
-
-// Write all lines from `lb` into `stream`.
-#define ed_lb_write_to_stream(lb, file)          \
-	da_foreach(line, lb)                     \
-	{                                        \
-		int result = fputs(*line, file); \
-		if (result < 0)                  \
-			break;                   \
-	}
-
-// Insert the contents of `source` into `target` at index `address`,
-// pushing off the contents of `target` to make room.
-void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
-		     size_t address);
-
-// Insert the contents of `source` into `target` at index `address`,
-// while removing the line at `address` from the target.
-void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
-			  size_t address);
-
-// Remove the line at `address` from `target`.
-void ed_lb_pop(Ed_Line_Builder *target, size_t address);
-
-// Wrapper around `ed_lb_read_from_stream` that reads lines from STDIN
-// until a line with just `"."` is encountered.
-#define ed_lb_read_to_dot(lb) ed_lb_read_from_stream(lb, stdin, ".\n")
-
-// Wrapper around `ed_lb_read_from_stream` that reads lines from `file` until EOF.
-#define ed_lb_read_file(lb, file) ed_lb_read_from_stream(lb, file, "")
-
-// Print lines from `lb` into `stream`
-#define ed_lb_fprint(stream, lb, start, end)                  \
-	do {                                                  \
-		size_t i = 0;                                 \
-		da_foreach(line, lb)                          \
-		{                                             \
-			i += 1;                               \
-			if (i >= start && i <= end)           \
-				fprintf(stream, "%s", *line); \
-		}                                             \
-	} while (0);
-
-// Wrapper around `ed_lb_fprint` which prints to STDOUT.
-#define ed_lb_print(lb, start, end) ed_lb_fprint(stdout, lb, start, end)
-
-// Print line numbers from `lb` into `stream`
-#define ed_lb_fnum(stream, lb, start, end)                   \
-	do {                                                 \
-		size_t i = 0;                                \
-		da_foreach(line, lb)                         \
-		{                                            \
-			i += 1;                              \
-			if (i >= start && i <= end)          \
-				fprintf(stream, "%zu\n", i); \
-		}                                            \
-	} while (0);
-
-// Wrapper around `ed_lb_fnum` which prints to STDOUT.
-#define ed_lb_num(lb, start, end) ed_lb_fnum(stdout, lb, start, end)
-
-// Print lines and their line numbers from `lb` into `stream`
-#define ed_lb_fprintn(stream, lb, start, end)                            \
-	do {                                                             \
-		size_t i = 0;                                            \
-		da_foreach(line, lb)                                     \
-		{                                                        \
-			i += 1;                                          \
-			if (i >= start && i <= end)                      \
-				fprintf(stream, "%zu     %s", i, *line); \
-		}                                                        \
-	} while (0);
-
-// Wrapper around `ed_lb_fprintn` which prints to STDOUT.
-#define ed_lb_printn(lb, start, end) ed_lb_fprintn(stdout, lb, start, end)
-
-// Free the allocated pointers in `lb`.
-#define ed_lb_free(lb)                  \
-	do {                            \
-		da_foreach(line, lb)    \
-		{                       \
-			free(*line);    \
-		}                       \
-		if (lb.items != NULL)   \
-			free(lb.items); \
-	} while (0);
-
-#define ed_lb_clear(lb)          \
-	do {                     \
-		ed_lb_free(lb);  \
-		lb.count = 0;    \
-		lb.items = NULL; \
-		lb.capacity = 0; \
-	} while (0);
+#include "./lb.h"
+#include "./ed.h"
 
 // COMMANDS
 
@@ -144,17 +43,7 @@ typedef union {
 	Ed_Range as_range;
 } Ed_Address;
 
-// Parse a address from user input.
-//
-// Returns `ED_ADDRESS_INVALID` upon failure.
-// Sets `address` upon success, and `line` is updated to point to after the address.
-// The return value specifies which member of the union for `address` has been set.
-Ed_Address_Type ed_parse_address(char **line, Ed_Address *address);
 
-// Parse a command type from user input.
-//
-// Returns `ED_CMD_INVALID` upon failure.
-Ed_Cmd_Type ed_parse_cmd_type(char **line);
 
 typedef enum {
 	ED_ERROR_NO_ERROR = 0,
@@ -166,10 +55,10 @@ typedef enum {
 
 // Globally-shared context within the application logic.
 typedef struct {
-	Ed_Line_Builder buffer;
+	Line_Builder buffer;
 	size_t line;
 	char *filename;
-	Ed_Line_Builder yank_register;
+	Line_Builder yank_register;
 	Ed_Error error;
 	bool prompt;
 	bool should_print_error;
@@ -183,106 +72,11 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .prompt = false,
 				 .should_print_error = false };
 
-bool ed_lb_read_from_stream(Ed_Line_Builder *lb, FILE *file, char *condition)
-{
-	while (true) {
-		char *line = NULL;
-		size_t nsize = 0;
-		ssize_t nread = getline(&line, &nsize, file);
-
-		if (nread < 1) {
-			if (line != NULL)
-				free(line);
-			return strlen(condition) == 0;
-		}
-
-		if (strcmp(line, condition) == 0) {
-			free(line);
-			return true;
-		}
-
-		da_append(lb, line);
-	}
-}
-
-void ed_lb_insert_at(Ed_Line_Builder *target, Ed_Line_Builder *source,
-		     size_t address)
-{
-	assert(address <= target->count);
-
-	if (target->count + source->count > target->capacity) {
-		if (target->capacity == 0) {
-			target->capacity = DA_CAP_INIT;
-		}
-		while (target->count + source->count > target->capacity) {
-			target->capacity *= 2;
-		}
-		target->items =
-			realloc(target->items,
-				target->capacity * sizeof(*target->items));
-		assert(target->items != NULL && "Could not reallocate memory");
-	}
-
-	memmove(target->items + address + source->count,
-		target->items + address,
-		(target->count - address) * sizeof(*target->items));
-	target->count += source->count;
-
-	memcpy(target->items + address, source->items,
-	       source->count * sizeof(source->items));
-}
-
-void ed_lb_pop_and_insert(Ed_Line_Builder *target, Ed_Line_Builder *source,
-			  size_t address)
-{
-	assert(address < target->count);
-
-	if (target->count + source->count - 1 > target->capacity) {
-		if (target->capacity == 0) {
-			target->capacity = DA_CAP_INIT;
-		}
-		while (target->count + source->count - 1 > target->capacity) {
-			target->capacity *= 2;
-		}
-		target->items =
-			realloc(target->items,
-				target->capacity * sizeof(*target->items));
-		assert(target->items != NULL && "Could not reallocate memory");
-	}
-
-	memmove(target->items + address + source->count,
-		target->items + address + 1,
-		(target->count - address - 1) * sizeof(*target->items));
-	target->count += source->count;
-
-	free(target->items[address]);
-	memcpy(target->items + address, source->items,
-	       source->count * sizeof(source->items));
-}
-
-void ed_lb_pop(Ed_Line_Builder *target, size_t address)
-{
-	assert(address < target->count);
-
-	free(target->items[address]);
-
-	memmove(target->items + address, target->items + address + 1,
-		(target->count - address - 1) * sizeof(*target->items));
-	target->count -= 1;
-}
-
-void ed_lb_pop_range(Ed_Line_Builder *target, size_t start, size_t end)
-{
-	assert(end < target->count);
-
-	for (size_t i = start; i <= end; ++i)
-		free(target->items[i]);
-
-	memmove(target->items + start, target->items + end + 1,
-		(target->count - end - 1) * sizeof(*target->items));
-	target->count -= end - start + 1;
-}
-
+// Parse a address from user input.
+//
+// Returns `ED_ADDRESS_INVALID` upon failure.
+// Sets `address` upon success, and `line` is updated to point to after the address.
+// The return value specifies which member of the union for `address` has been set.
 Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 {
 	Ed_Context *context = &ed_global_context;
@@ -391,6 +185,9 @@ char *trim(char *s)
 	return rtrim(ltrim(s));
 }
 
+// Parse a command type from user input.
+//
+// Returns `ED_CMD_INVALID` upon failure.
 Ed_Cmd_Type ed_parse_cmd_type(char **line)
 {
 	switch (*line[0]) {
@@ -434,7 +231,7 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 	}
 }
 
-bool out_of_buffer(Ed_Line_Builder buffer, size_t n)
+bool out_of_buffer(Line_Builder buffer, size_t n)
 {
 	if (n == 0 && buffer.count == 0)
 		return true;
@@ -525,7 +322,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		if (address_type == ED_ADDRESS_START) {
 			printf("%zu\n", address.as_start);
 		} else {
-			ed_lb_num(context->buffer, address.as_range.start,
+			lb_num(context->buffer, address.as_range.start,
 				  address.as_range.end);
 		}
 	} break;
@@ -539,7 +336,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			printf("%s",
 			       context->buffer.items[address.as_start - 1]);
 		} else {
-			ed_lb_print(context->buffer, address.as_range.start,
+			lb_print(context->buffer, address.as_range.start,
 				    address.as_range.end);
 		}
 	} break;
@@ -553,7 +350,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			printf("%zu     %s", address.as_start,
 			       context->buffer.items[address.as_start - 1]);
 		} else {
-			ed_lb_printn(context->buffer, address.as_range.start,
+			lb_printn(context->buffer, address.as_range.start,
 				     address.as_range.end);
 		}
 	} break;
@@ -563,14 +360,14 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		Ed_Line_Builder lb = { 0 };
-		bool result = ed_lb_read_to_dot(&lb);
+		Line_Builder lb = { 0 };
+		bool result = lb_read_to_dot(&lb);
 		if (!result) {
 			context->error = ED_ERROR_UNKNOWN;
 			return false;
 		}
 
-		ed_lb_insert_at(&context->buffer, &lb, address.as_start);
+		lb_insert(&context->buffer, &lb, address.as_start);
 	} break;
 	case ED_CMD_INSERT: {
 		if (!ensure_address_start(address, address_type) &&
@@ -579,8 +376,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		Ed_Line_Builder lb = { 0 };
-		bool result = ed_lb_read_to_dot(&lb);
+		Line_Builder lb = { 0 };
+		bool result = lb_read_to_dot(&lb);
 		if (!result) {
 			context->error = ED_ERROR_UNKNOWN;
 			return false;
@@ -588,7 +385,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 		size_t line = address.as_start > 0 ? address.as_start - 1 : 0;
 		context->line = line + lb.count;
-		ed_lb_insert_at(&context->buffer, &lb, line);
+		lb_insert(&context->buffer, &lb, line);
 		free(lb.items);
 	} break;
 	case ED_CMD_CHANGE: {
@@ -597,8 +394,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		Ed_Line_Builder lb = { 0 };
-		bool result = ed_lb_read_to_dot(&lb);
+		Line_Builder lb = { 0 };
+		bool result = lb_read_to_dot(&lb);
 		if (!result) {
 			context->error = ED_ERROR_UNKNOWN;
 			return false;
@@ -608,12 +405,12 @@ bool ed_handle_cmd(char *line, bool *quit)
 			da_append(&context->yank_register,
 				  strdup(context->buffer
 						 .items[address.as_start - 1]));
-			ed_lb_pop_and_insert(&context->buffer, &lb,
-					     address.as_start - 1);
+			lb_overwrite(&context->buffer, &lb,
+					     address.as_start - 1, address.as_start - 1);
 			free(lb.items);
 		} else {
 			if (context->yank_register.items != NULL) {
-				ed_lb_clear(context->yank_register);
+				lb_clear(context->yank_register);
 			}
 
 			size_t index = address.as_range.start - 1;
@@ -623,10 +420,10 @@ bool ed_handle_cmd(char *line, bool *quit)
 				if (index < address.as_range.end) {
 					da_append(&context->yank_register,
 						  strdup(*line));
-					ed_lb_pop(&context->buffer, index);
+					lb_pop_line(&context->buffer, index);
 				}
 			}
-			ed_lb_insert_at(&context->buffer, &lb,
+			lb_insert(&context->buffer, &lb,
 					address.as_range.start);
 		}
 	} break;
@@ -638,16 +435,16 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 		if (address_type == ED_ADDRESS_START) {
 			if (context->yank_register.items != NULL) {
-				ed_lb_clear(context->yank_register);
+				lb_clear(context->yank_register);
 			}
 
 			da_append(&context->yank_register,
 				  strdup(context->buffer
 						 .items[address.as_start - 1]));
-			ed_lb_pop(&context->buffer, address.as_start - 1);
+			lb_pop_line(&context->buffer, address.as_start - 1);
 		} else {
 			if (context->yank_register.items != NULL) {
-				ed_lb_clear(context->yank_register);
+				lb_clear(context->yank_register);
 			}
 
 			size_t start = address.as_range.start;
@@ -657,7 +454,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 					  strdup(context->buffer.items[i]));
 			}
 
-			ed_lb_pop_range(&context->buffer,
+			lb_pop_range(&context->buffer,
 					start > 0 ? start - 1 : 0, end - 1);
 		}
 	} break;
@@ -667,13 +464,13 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		Ed_Line_Builder tmp = { 0 };
+		Line_Builder tmp = { 0 };
 		da_foreach(line, context->yank_register)
 		{
 			da_append(&tmp, strdup(*line));
 		}
 
-		ed_lb_insert_at(&context->buffer, &tmp,
+		lb_insert(&context->buffer, &tmp,
 				address_type == ED_ADDRESS_START ?
 					address.as_start :
 					address.as_range.end);
@@ -688,7 +485,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		bool result = ed_lb_read_file(&context->buffer, f);
+		bool result = lb_read_file(&context->buffer, f);
 		context->line = context->buffer.count > 0 ?
 					context->buffer.count - 1 :
 					0;
@@ -715,7 +512,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			return false;
 		}
 
-		ed_lb_write_to_stream(context->buffer, f);
+		lb_write_to_stream(context->buffer, f);
 		fclose(f);
 	} break;
 	case ED_CMD_JOIN: {
@@ -744,7 +541,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 			context->buffer.items[start] = result;
 		}
 
-		ed_lb_pop_range(&context->buffer, start + 1, end);
+		lb_pop_range(&context->buffer, start + 1, end);
 	} break;
 	case ED_CMD_LAST_ERR: {
 		ed_print_error();
@@ -768,8 +565,8 @@ void ed_cleanup()
 	Ed_Context *context = &ed_global_context;
 
 	free(context->filename);
-	ed_lb_free(context->buffer);
-	ed_lb_free(context->yank_register);
+	lb_free(context->buffer);
+	lb_free(context->yank_register);
 }
 
 bool ed_should_print_error()
