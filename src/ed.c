@@ -29,7 +29,6 @@ char *trim(char *s)
 	return rtrim(ltrim(s));
 }
 
-
 char *strappend(char *a, char *b)
 {
 	int sizea = strlen(a);
@@ -46,7 +45,6 @@ char *strappend(char *a, char *b)
 
 	return s;
 }
-
 
 // COMMANDS
 
@@ -309,7 +307,27 @@ bool ed_cmd_num(Ed_Address address, Ed_Address_Type address_type)
 		printf("%zu\n", address.as_start);
 	} else {
 		lb_num(context->buffer, address.as_range.start,
-				address.as_range.end);
+		       address.as_range.end);
+	}
+
+	return true;
+}
+
+bool ed_cmd_print(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, address_type)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	if (address_type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.as_start);
+		printf("%s", context->buffer.items[start]);
+	} else {
+		lb_print(context->buffer, address.as_range.start,
+			 address.as_range.end);
 	}
 
 	return true;
@@ -344,18 +362,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_num(address, address_type);
 	} break;
 	case ED_CMD_PRINT: {
-		if (address_out_of_range(address, address_type)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		if (address_type == ED_ADDRESS_START) {
-			size_t start = line_to_index(address.as_start);
-			printf("%s", context->buffer.items[start]);
-		} else {
-			lb_print(context->buffer, address.as_range.start,
-				 address.as_range.end);
-		}
+		return ed_cmd_print(address, address_type);
 	} break;
 	case ED_CMD_PRINT_NUM: {
 		if (address_out_of_range(address, address_type)) {

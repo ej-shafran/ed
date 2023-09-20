@@ -54,7 +54,7 @@ bool lb_contains(Line_Builder lb, size_t n);
 // Print lines from `lb` into `STDOUT`
 #define lb_print(lb, start, end)                        \
 	do {                                            \
-		for (size_t i = 0; i < lb.count; ++i) { \
+		for (size_t i = start - 1; i < end; ++i) { \
 			printf("%s", lb.items[i]);      \
 		}                                       \
 	} while (0);
