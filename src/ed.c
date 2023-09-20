@@ -251,21 +251,25 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 	}
 }
 
-bool address_out_of_range(Ed_Address address, Ed_Address_Type type, bool allow_zero)
+bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
+			  bool allow_zero)
 {
 	Ed_Context *context = &ed_global_context;
 
 	switch (type) {
 	case ED_ADDRESS_START: {
-		if (!allow_zero && address.as_start == 0) return true;
+		if (!allow_zero && address.as_start == 0)
+			return true;
 		size_t start = line_to_index(address.as_start);
 		return !lb_contains(context->buffer, start);
 	} break;
 	case ED_ADDRESS_RANGE: {
-		if (!allow_zero && address.as_range.start == 0) return true;
+		if (!allow_zero && address.as_range.start == 0)
+			return true;
 		size_t start = line_to_index(address.as_range.start);
 		size_t end = line_to_index(address.as_range.end);
-		if (end < start) return false;
+		if (end < start)
+			return false;
 		return !lb_contains(context->buffer, start) ||
 		       !lb_contains(context->buffer, end);
 	} break;
@@ -336,6 +340,27 @@ bool ed_cmd_print(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_print_num(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, address_type, false)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	if (address_type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.as_start);
+		printf("%zu     %s", address.as_start,
+		       context->buffer.items[start]);
+	} else {
+		lb_printn(context->buffer, address.as_range.start,
+			  address.as_range.end);
+	}
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -368,19 +393,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_print(address, address_type);
 	} break;
 	case ED_CMD_PRINT_NUM: {
-		if (address_out_of_range(address, address_type, false)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		if (address_type == ED_ADDRESS_START) {
-			size_t start = line_to_index(address.as_start);
-			printf("%zu     %s", address.as_start,
-			       context->buffer.items[start]);
-		} else {
-			lb_printn(context->buffer, address.as_range.start,
-				  address.as_range.end);
-		}
+		return ed_cmd_print_num(address, address_type);
 	} break;
 	case ED_CMD_APPEND: {
 		if (!ensure_address_start(address, address_type)) {
