@@ -46,7 +46,7 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 // Print lines from `lb` into `stream`
 #define ed_lb_fprint(stream, lb, start, end)                  \
 	do {                                                  \
-		size_t i = 0;                                    \
+		size_t i = 0;                                 \
 		da_foreach(line, lb)                          \
 		{                                             \
 			i += 1;                               \
@@ -59,30 +59,30 @@ void ed_lb_pop(Ed_Line_Builder *target, size_t address);
 #define ed_lb_print(lb, start, end) ed_lb_fprint(stdout, lb, start, end)
 
 // Print line numbers from `lb` into `stream`
-#define ed_lb_fnum(stream, lb, start, end)                  \
-	do {                                                \
-		size_t i = 0;                                  \
-		da_foreach(line, lb)                        \
-		{                                           \
-			i += 1;                             \
-			if (i >= start && i <= end)         \
+#define ed_lb_fnum(stream, lb, start, end)                   \
+	do {                                                 \
+		size_t i = 0;                                \
+		da_foreach(line, lb)                         \
+		{                                            \
+			i += 1;                              \
+			if (i >= start && i <= end)          \
 				fprintf(stream, "%zu\n", i); \
-		}                                           \
+		}                                            \
 	} while (0);
 
 // Wrapper around `ed_lb_fnum` which prints to STDOUT.
 #define ed_lb_num(lb, start, end) ed_lb_fnum(stdout, lb, start, end)
 
 // Print lines and their line numbers from `lb` into `stream`
-#define ed_lb_fprintn(stream, lb, start, end)                           \
-	do {                                                            \
-		size_t i = 0;                                              \
-		da_foreach(line, lb)                                    \
-		{                                                       \
-			i += 1;                                         \
-			if (i >= start && i <= end)                     \
+#define ed_lb_fprintn(stream, lb, start, end)                            \
+	do {                                                             \
+		size_t i = 0;                                            \
+		da_foreach(line, lb)                                     \
+		{                                                        \
+			i += 1;                                          \
+			if (i >= start && i <= end)                      \
 				fprintf(stream, "%zu     %s", i, *line); \
-		}                                                       \
+		}                                                        \
 	} while (0);
 
 // Wrapper around `ed_lb_fprintn` which prints to STDOUT.
@@ -490,6 +490,7 @@ bool ensure_address_start(Ed_Address address, Ed_Address_Type address_type)
 	return !out_of_buffer(context->buffer, address.as_start);
 }
 
+// API
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
@@ -737,9 +738,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 			int len = strlen(context->buffer.items[start]);
 			context->buffer.items[start][len - 1] = '\0';
 
-			char *result =
-				strappend(context->buffer.items[start],
-					  context->buffer.items[i]);
+			char *result = strappend(context->buffer.items[start],
+						 context->buffer.items[i]);
 			free(context->buffer.items[start]);
 			context->buffer.items[start] = result;
 		}
