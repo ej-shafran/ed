@@ -78,3 +78,8 @@ void lb_pop_range(Line_Builder *target, size_t start, size_t end)
 		(target->count - end - 1) * sizeof(*target->items));
 	target->count -= end - start + 1;
 }
+
+bool lb_contains(Line_Builder lb, size_t n)
+{
+    return n < lb.count;
+}

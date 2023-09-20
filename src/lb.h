@@ -27,6 +27,9 @@ void lb_pop_line(Line_Builder *target, size_t index);
 // Remove the lines between `start` and `end` from `target`.
 void lb_pop_range(Line_Builder *target, size_t start, size_t end);
 
+// Check if `n` is within the range of `lb`.
+bool lb_contains(Line_Builder lb, size_t n);
+
 // Append a line to a `Line_Builder`
 #define lb_append(lb, line) da_append(lb, line)
 
