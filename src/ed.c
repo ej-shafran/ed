@@ -381,6 +381,29 @@ bool ed_cmd_append(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_insert(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+	if (address_type != ED_ADDRESS_START ||
+	    address_out_of_range(address, address_type, true)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	Line_Builder lb = { 0 };
+	bool result = lb_read_to_dot(&lb);
+	if (!result) {
+		context->error = ED_ERROR_UNKNOWN;
+		return false;
+	}
+
+	context->line = address.as_start;
+	lb_insert(&context->buffer, &lb, line_to_index(context->line));
+	free(lb.items);
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -419,22 +442,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_append(address, address_type);
 	} break;
 	case ED_CMD_INSERT: {
-		if (!ensure_address_start(address, address_type) &&
-		    address.as_start != 0) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		Line_Builder lb = { 0 };
-		bool result = lb_read_to_dot(&lb);
-		if (!result) {
-			context->error = ED_ERROR_UNKNOWN;
-			return false;
-		}
-
-		context->line = address.as_start;
-		lb_insert(&context->buffer, &lb, line_to_index(context->line));
-		free(lb.items);
+		return ed_cmd_insert(address, address_type);
 	} break;
 	case ED_CMD_CHANGE: {
 		if (address_out_of_range(address, address_type, false)) {
