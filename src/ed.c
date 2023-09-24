@@ -469,6 +469,29 @@ bool ed_cmd_delete(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_put(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, address_type, true)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	Line_Builder tmp = { 0 };
+	lb_foreach(line, context->yank_register)
+	{
+		lb_append(&tmp, strdup(*line));
+	}
+
+	lb_insert(&context->buffer, &tmp,
+		  address_type == ED_ADDRESS_START ? address.as_start :
+						     address.as_range.end);
+	free(tmp.items);
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -552,22 +575,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_delete(address, address_type);
 	} break;
 	case ED_CMD_PUT: {
-		if (address_out_of_range(address, address_type, true)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		Line_Builder tmp = { 0 };
-		lb_foreach(line, context->yank_register)
-		{
-			lb_append(&tmp, strdup(*line));
-		}
-
-		lb_insert(&context->buffer, &tmp,
-			  address_type == ED_ADDRESS_START ?
-				  address.as_start :
-				  address.as_range.end);
-		free(tmp.items);
+		return ed_cmd_put(address, address_type);
 	} break;
 	case ED_CMD_EDIT: {
 		context->filename = strdup(line);
