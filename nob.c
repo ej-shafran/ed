@@ -12,6 +12,8 @@ void print_subcommands(FILE *stream)
 	fprintf(stream, "        Build the project\n");
 	fprintf(stream, "    run\n");
 	fprintf(stream, "        Run the resulting executable\n");
+	fprintf(stream, "    test\n");
+	fprintf(stream, "        Test the project\n");
 }
 
 void main_usage(FILE *stream)
@@ -19,6 +21,14 @@ void main_usage(FILE *stream)
 	fprintf(stream, "Usage: ./nob <SUBCOMMAND> [OPTIONS]\n");
 	fprintf(stream, "\n");
 	print_subcommands(stream);
+	fprintf(stream, "\n");
+	fprintf(stream, "Options:\n");
+	flag_print_options(stream);
+}
+
+void test_usage(FILE *stream)
+{
+	fprintf(stream, "Usage: ./nob test\n");
 	fprintf(stream, "\n");
 	fprintf(stream, "Options:\n");
 	flag_print_options(stream);
@@ -38,6 +48,20 @@ void build_usage(FILE *stream)
 	fprintf(stream, "\n");
 	fprintf(stream, "Options:\n");
 	flag_print_options(stream);
+}
+
+bool test()
+{
+	nob_log(NOB_INFO, "running `test` subcommand.");
+
+	Nob_Cmd cmd = { 0 };
+
+	nob_cmd_append(&cmd, "bash");
+	nob_cmd_append(&cmd, "./test.bash");
+
+	bool result = nob_cmd_run_sync(cmd);
+	nob_cmd_free(cmd);
+	return result;
 }
 
 bool run()
@@ -70,6 +94,31 @@ bool build()
 	bool result = nob_cmd_run_sync(cmd);
 	nob_cmd_free(cmd);
 	return result;
+}
+
+bool test_command(int argc, char **argv, bool *help)
+{
+	bool *without_build =
+		flag_bool("-without-build", false,
+			  "Run tests without rebuilding executable.");
+	flag_add_alias(without_build, "w");
+
+	if (!flag_parse(argc, argv)) {
+		test_usage(stderr);
+		return false;
+	}
+
+	if (*help) {
+		test_usage(stdout);
+		return true;
+	}
+
+	if (!(*without_build)) {
+		if (!build())
+			return false;
+	}
+
+	return test();
 }
 
 bool run_command(int argc, char **argv, bool *help)
@@ -138,6 +187,9 @@ int main(int argc, char **argv)
 			return 1;
 	} else if (strcmp(rest_argv[0], "run") == 0) {
 		if (!run_command(rest_argc, rest_argv, help))
+			return 1;
+	} else if (strcmp(rest_argv[0], "test") == 0) {
+		if (!test_command(rest_argc, rest_argv, help))
 			return 1;
 	} else {
 		main_usage(stderr);
