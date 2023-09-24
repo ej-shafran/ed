@@ -432,6 +432,43 @@ bool ed_cmd_write(char *line)
 	return true;
 }
 
+bool ed_cmd_delete(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, address_type, false)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	if (address_type == ED_ADDRESS_START) {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t start = line_to_index(address.as_start);
+
+		lb_append(&context->yank_register,
+			  strdup(context->buffer.items[start]));
+		lb_pop_line(&context->buffer, start);
+	} else {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t start = line_to_index(address.as_range.start);
+		size_t end = address.as_range.end;
+		for (size_t i = start; i < end; ++i) {
+			lb_append(&context->yank_register,
+				  strdup(context->buffer.items[i]));
+		}
+
+		lb_pop_range(&context->buffer, start, end - 1);
+	}
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -512,35 +549,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		}
 	} break;
 	case ED_CMD_DELETE: {
-		if (address_out_of_range(address, address_type, false)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		if (address_type == ED_ADDRESS_START) {
-			if (context->yank_register.items != NULL) {
-				lb_clear(context->yank_register);
-			}
-
-			size_t start = line_to_index(address.as_start);
-
-			lb_append(&context->yank_register,
-				  strdup(context->buffer.items[start]));
-			lb_pop_line(&context->buffer, start);
-		} else {
-			if (context->yank_register.items != NULL) {
-				lb_clear(context->yank_register);
-			}
-
-			size_t start = line_to_index(address.as_range.start);
-			size_t end = address.as_range.end;
-			for (size_t i = start; i < end; ++i) {
-				lb_append(&context->yank_register,
-					  strdup(context->buffer.items[i]));
-			}
-
-			lb_pop_range(&context->buffer, start, end - 1);
-		}
+		return ed_cmd_delete(address, address_type);
 	} break;
 	case ED_CMD_PUT: {
 		if (address_out_of_range(address, address_type, true)) {
