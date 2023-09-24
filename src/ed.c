@@ -60,6 +60,7 @@ typedef enum {
 	ED_CMD_PRINT,
 	ED_CMD_PRINT_NUM,
 	ED_CMD_QUIT,
+	ED_CMD_FORCE_QUIT,
 	ED_CMD_LAST_ERR,
 	ED_CMD_TOGGLE_PROMPT,
 	ED_CMD_TOGGLE_ERR,
@@ -95,6 +96,7 @@ typedef enum {
 	ED_ERROR_INVALID_COMMAND,
 	ED_ERROR_INVALID_ADDRESS,
 	ED_ERROR_INVALID_FILE,
+	ED_ERROR_UNSAVED_CHANGES,
 	ED_ERROR_UNKNOWN,
 } Ed_Error;
 
@@ -108,6 +110,7 @@ typedef struct {
 	Ed_Error error;
 	bool prompt;
 	bool should_print_error;
+	bool has_changes;
 } Ed_Context;
 
 Ed_Context ed_global_context = { .buffer = { 0 },
@@ -116,7 +119,8 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .filename = 0,
 				 .error = ED_ERROR_NO_ERROR,
 				 .prompt = false,
-				 .should_print_error = false };
+				 .should_print_error = false,
+				 .has_changes = false };
 
 // Parse a address from user input.
 //
@@ -125,7 +129,7 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 // The return value specifies which member of the union for `address` has been set.
 Ed_Address ed_parse_address(char **line)
 {
-	Ed_Address address = {0};
+	Ed_Address address = { 0 };
 	Ed_Context *context = &ed_global_context;
 
 	Ed_Address_Type result;
@@ -247,6 +251,8 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		return ED_CMD_TOGGLE_PROMPT;
 	case 'q':
 		return ED_CMD_QUIT;
+	case 'Q':
+		return ED_CMD_FORCE_QUIT;
 	case 'w':
 		*line += 1;
 		*line = trim(*line);
@@ -290,9 +296,15 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
 	}
 }
 
-bool ed_cmd_quit(bool *quit)
+bool ed_cmd_quit(bool *quit, bool force)
 {
-	// TODO: warning
+	Ed_Context *context = &ed_global_context;
+
+	if (!force && context->has_changes) {
+		context->error = ED_ERROR_UNSAVED_CHANGES;
+		context->has_changes = false;
+		return false;
+	}
 	*quit = true;
 	return true;
 }
@@ -376,6 +388,8 @@ bool ed_cmd_append(Ed_Address address)
 	size_t amount = lb.count;
 	lb_insert(&context->buffer, &lb, address.position.as_line);
 	context->line = address.position.as_line + amount;
+
+	context->has_changes = true;
 	return true;
 }
 
@@ -399,6 +413,7 @@ bool ed_cmd_insert(Ed_Address address)
 	lb_insert(&context->buffer, &lb, line_to_index(context->line));
 	free(lb.items);
 
+	context->has_changes = true;
 	return true;
 }
 
@@ -425,6 +440,7 @@ bool ed_cmd_write(char *line)
 	lb_write_to_stream(context->buffer, f);
 	fclose(f);
 
+	context->has_changes = false;
 	return true;
 }
 
@@ -462,6 +478,7 @@ bool ed_cmd_delete(Ed_Address address)
 		lb_pop_range(&context->buffer, start, end - 1);
 	}
 
+	context->has_changes = true;
 	return true;
 }
 
@@ -481,10 +498,12 @@ bool ed_cmd_put(Ed_Address address)
 	}
 
 	lb_insert(&context->buffer, &tmp,
-		  address.type == ED_ADDRESS_START ? address.position.as_line :
-						     address.position.as_range.end);
+		  address.type == ED_ADDRESS_START ?
+			  address.position.as_line :
+			  address.position.as_range.end);
 	free(tmp.items);
 
+	context->has_changes = true;
 	return true;
 }
 
@@ -597,8 +616,9 @@ bool ed_handle_cmd(char *line, bool *quit)
 		if (address.type != ED_ADDRESS_START) {
 			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
-		} else if (!lb_contains(context->buffer,
-					line_to_index(address.position.as_line))) {
+		} else if (!lb_contains(
+				   context->buffer,
+				   line_to_index(address.position.as_line))) {
 			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		} else {
@@ -606,7 +626,10 @@ bool ed_handle_cmd(char *line, bool *quit)
 		}
 	} break;
 	case ED_CMD_QUIT: {
-		return ed_cmd_quit(quit);
+		return ed_cmd_quit(quit, false);
+	} break;
+	case ED_CMD_FORCE_QUIT: {
+		return ed_cmd_quit(quit, true);
 	} break;
 	case ED_CMD_NUM: {
 		return ed_cmd_num(address);
@@ -691,7 +714,10 @@ void ed_print_error()
 	case ED_ERROR_INVALID_ADDRESS: {
 		fprintf(stderr, "Invalid address.\n");
 	} break;
-	default: {
+	case ED_ERROR_UNSAVED_CHANGES: {
+		fprintf(stderr, "Buffer has unsaved changes.\n");
+	} break;
+	case ED_ERROR_UNKNOWN: {
 		fprintf(stderr, "Unknown error.\n");
 	} break;
 	}
