@@ -79,8 +79,13 @@ typedef enum {
 } Ed_Address_Type;
 
 typedef union {
-	size_t as_start;
+	size_t as_line;
 	Ed_Range as_range;
+} Ed_Address_Position;
+
+typedef struct {
+	Ed_Address_Position position;
+	Ed_Address_Type type;
 } Ed_Address;
 
 #define line_to_index(line) ((line) == 0 ? 0 : (line)-1)
@@ -118,8 +123,9 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 // Returns `ED_ADDRESS_INVALID` upon failure.
 // Sets `address` upon success, and `line` is updated to point to after the address.
 // The return value specifies which member of the union for `address` has been set.
-Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
+Ed_Address ed_parse_address(char **line)
 {
+	Ed_Address address = {0};
 	Ed_Context *context = &ed_global_context;
 
 	Ed_Address_Type result;
@@ -142,20 +148,20 @@ Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 			start = context->buffer.count;
 			c += 1;
 		} else if (*c == ',') {
-			address->as_range.start = 1;
-			address->as_range.end = context->buffer.count;
+			address.position.as_range.start = 1;
+			address.position.as_range.end = context->buffer.count;
 			c += 1;
 			result = ED_ADDRESS_RANGE;
 			goto defer;
 		} else {
-			address->as_start = context->line;
+			address.position.as_line = context->line;
 			result = ED_ADDRESS_START;
 			goto defer;
 		}
 	}
 
 	if (*c != ',') {
-		address->as_start = start;
+		address.position.as_line = start;
 		result = ED_ADDRESS_START;
 		goto defer;
 	}
@@ -190,19 +196,20 @@ Ed_Address_Type ed_parse_address(char **line, Ed_Address *address)
 	}
 
 	if (start == end) {
-		address->as_start = start;
+		address.position.as_line = start;
 		result = ED_ADDRESS_START;
 		goto defer;
 	}
 
-	address->as_range.start = start;
-	address->as_range.end = end;
+	address.position.as_range.start = start;
+	address.position.as_range.end = end;
 	result = ED_ADDRESS_RANGE;
 	goto defer;
 
 defer:
 	*line = c;
-	return result;
+	address.type = result;
+	return address;
 }
 
 // Parse a command type from user input.
@@ -258,16 +265,16 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
 
 	switch (type) {
 	case ED_ADDRESS_START: {
-		if (address.as_start == 0)
+		if (address.position.as_line == 0)
 			return !allow_zero;
-		size_t start = line_to_index(address.as_start);
+		size_t start = line_to_index(address.position.as_line);
 		return !lb_contains(context->buffer, start);
 	} break;
 	case ED_ADDRESS_RANGE: {
-		if (address.as_range.start == 0)
+		if (address.position.as_range.start == 0)
 			return !allow_zero;
-		size_t start = line_to_index(address.as_range.start);
-		size_t end = line_to_index(address.as_range.end);
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = line_to_index(address.position.as_range.end);
 		if (end < start)
 			return false;
 		return !lb_contains(context->buffer, start) ||
@@ -283,17 +290,6 @@ bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
 	}
 }
 
-bool ensure_address_start(Ed_Address address, Ed_Address_Type address_type)
-{
-	Ed_Context *context = &ed_global_context;
-
-	if (address_type != ED_ADDRESS_START)
-		return false;
-
-	size_t start = line_to_index(address.as_start);
-	return lb_contains(context->buffer, start);
-}
-
 bool ed_cmd_quit(bool *quit)
 {
 	// TODO: warning
@@ -301,71 +297,71 @@ bool ed_cmd_quit(bool *quit)
 	return true;
 }
 
-bool ed_cmd_num(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_num(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, false)) {
+	if (address_out_of_range(address, address.type, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
 
-	if (address_type == ED_ADDRESS_START) {
-		printf("%zu\n", address.as_start);
+	if (address.type == ED_ADDRESS_START) {
+		printf("%zu\n", address.position.as_line);
 	} else {
-		lb_num(context->buffer, address.as_range.start,
-		       address.as_range.end);
+		lb_num(context->buffer, address.position.as_range.start,
+		       address.position.as_range.end);
 	}
 
 	return true;
 }
 
-bool ed_cmd_print(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_print(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, false)) {
+	if (address_out_of_range(address, address.type, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
 
-	if (address_type == ED_ADDRESS_START) {
-		size_t start = line_to_index(address.as_start);
+	if (address.type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.position.as_line);
 		printf("%s", context->buffer.items[start]);
 	} else {
-		lb_print(context->buffer, address.as_range.start,
-			 address.as_range.end);
+		lb_print(context->buffer, address.position.as_range.start,
+			 address.position.as_range.end);
 	}
 
 	return true;
 }
 
-bool ed_cmd_print_num(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_print_num(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, false)) {
+	if (address_out_of_range(address, address.type, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
 
-	if (address_type == ED_ADDRESS_START) {
-		size_t start = line_to_index(address.as_start);
-		printf("%zu     %s", address.as_start,
+	if (address.type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.position.as_line);
+		printf("%zu     %s", address.position.as_line,
 		       context->buffer.items[start]);
 	} else {
-		lb_printn(context->buffer, address.as_range.start,
-			  address.as_range.end);
+		lb_printn(context->buffer, address.position.as_range.start,
+			  address.position.as_range.end);
 	}
 
 	return true;
 }
 
-bool ed_cmd_append(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_append(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
-	if (address_type != ED_ADDRESS_START ||
-	    address_out_of_range(address, address_type, true)) {
+	if (address.type != ED_ADDRESS_START ||
+	    address_out_of_range(address, address.type, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -378,16 +374,16 @@ bool ed_cmd_append(Ed_Address address, Ed_Address_Type address_type)
 	}
 
 	size_t amount = lb.count;
-	lb_insert(&context->buffer, &lb, address.as_start);
-	context->line = address.as_start + amount;
+	lb_insert(&context->buffer, &lb, address.position.as_line);
+	context->line = address.position.as_line + amount;
 	return true;
 }
 
-bool ed_cmd_insert(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_insert(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
-	if (address_type != ED_ADDRESS_START ||
-	    address_out_of_range(address, address_type, true)) {
+	if (address.type != ED_ADDRESS_START ||
+	    address_out_of_range(address, address.type, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -399,7 +395,7 @@ bool ed_cmd_insert(Ed_Address address, Ed_Address_Type address_type)
 		return false;
 	}
 
-	context->line = address.as_start;
+	context->line = address.position.as_line;
 	lb_insert(&context->buffer, &lb, line_to_index(context->line));
 	free(lb.items);
 
@@ -432,21 +428,21 @@ bool ed_cmd_write(char *line)
 	return true;
 }
 
-bool ed_cmd_delete(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_delete(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, false)) {
+	if (address_out_of_range(address, address.type, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
 
-	if (address_type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_START) {
 		if (context->yank_register.items != NULL) {
 			lb_clear(context->yank_register);
 		}
 
-		size_t start = line_to_index(address.as_start);
+		size_t start = line_to_index(address.position.as_line);
 
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
@@ -456,8 +452,8 @@ bool ed_cmd_delete(Ed_Address address, Ed_Address_Type address_type)
 			lb_clear(context->yank_register);
 		}
 
-		size_t start = line_to_index(address.as_range.start);
-		size_t end = address.as_range.end;
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = address.position.as_range.end;
 		for (size_t i = start; i < end; ++i) {
 			lb_append(&context->yank_register,
 				  strdup(context->buffer.items[i]));
@@ -469,11 +465,11 @@ bool ed_cmd_delete(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
-bool ed_cmd_put(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_put(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, true)) {
+	if (address_out_of_range(address, address.type, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -485,8 +481,8 @@ bool ed_cmd_put(Ed_Address address, Ed_Address_Type address_type)
 	}
 
 	lb_insert(&context->buffer, &tmp,
-		  address_type == ED_ADDRESS_START ? address.as_start :
-						     address.as_range.end);
+		  address.type == ED_ADDRESS_START ? address.position.as_line :
+						     address.position.as_range.end);
 	free(tmp.items);
 
 	return true;
@@ -513,17 +509,17 @@ bool ed_cmd_edit(char *line)
 	return result;
 }
 
-bool ed_cmd_join(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_join(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
 	size_t start, end;
-	if (address_type == ED_ADDRESS_START) {
-		start = line_to_index(address.as_start);
+	if (address.type == ED_ADDRESS_START) {
+		start = line_to_index(address.position.as_line);
 		end = start + 1;
 	} else {
-		start = line_to_index(address.as_range.start);
-		end = line_to_index(address.as_range.end);
+		start = line_to_index(address.position.as_range.start);
+		end = line_to_index(address.position.as_range.end);
 	}
 
 	if ((!lb_contains(context->buffer, start) && start != 0) ||
@@ -547,11 +543,11 @@ bool ed_cmd_join(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
-bool ed_cmd_change(Ed_Address address, Ed_Address_Type address_type)
+bool ed_cmd_change(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address_type, false)) {
+	if (address_out_of_range(address, address.type, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -563,8 +559,8 @@ bool ed_cmd_change(Ed_Address address, Ed_Address_Type address_type)
 		return false;
 	}
 
-	if (address_type == ED_ADDRESS_START) {
-		size_t start = line_to_index(address.as_start);
+	if (address.type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.position.as_line);
 
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
@@ -574,8 +570,8 @@ bool ed_cmd_change(Ed_Address address, Ed_Address_Type address_type)
 			lb_clear(context->yank_register);
 		}
 
-		size_t start = line_to_index(address.as_range.start);
-		size_t end = line_to_index(address.as_range.end);
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = line_to_index(address.position.as_range.end);
 
 		for (size_t i = start; i <= end; ++i) {
 			lb_append(&context->yank_register,
@@ -593,49 +589,48 @@ bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
 
-	Ed_Address address = { 0 };
-	Ed_Address_Type address_type = ed_parse_address(&line, &address);
+	Ed_Address address = ed_parse_address(&line);
 
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
 	case ED_CMD_INVALID: {
-		if (address_type != ED_ADDRESS_START) {
+		if (address.type != ED_ADDRESS_START) {
 			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
 		} else if (!lb_contains(context->buffer,
-					line_to_index(address.as_start))) {
+					line_to_index(address.position.as_line))) {
 			context->error = ED_ERROR_INVALID_ADDRESS;
 			return false;
 		} else {
-			context->line = address.as_start;
+			context->line = address.position.as_line;
 		}
 	} break;
 	case ED_CMD_QUIT: {
 		return ed_cmd_quit(quit);
 	} break;
 	case ED_CMD_NUM: {
-		return ed_cmd_num(address, address_type);
+		return ed_cmd_num(address);
 	} break;
 	case ED_CMD_PRINT: {
-		return ed_cmd_print(address, address_type);
+		return ed_cmd_print(address);
 	} break;
 	case ED_CMD_PRINT_NUM: {
-		return ed_cmd_print_num(address, address_type);
+		return ed_cmd_print_num(address);
 	} break;
 	case ED_CMD_APPEND: {
-		return ed_cmd_append(address, address_type);
+		return ed_cmd_append(address);
 	} break;
 	case ED_CMD_INSERT: {
-		return ed_cmd_insert(address, address_type);
+		return ed_cmd_insert(address);
 	} break;
 	case ED_CMD_CHANGE: {
-		return ed_cmd_change(address, address_type);
+		return ed_cmd_change(address);
 	} break;
 	case ED_CMD_DELETE: {
-		return ed_cmd_delete(address, address_type);
+		return ed_cmd_delete(address);
 	} break;
 	case ED_CMD_PUT: {
-		return ed_cmd_put(address, address_type);
+		return ed_cmd_put(address);
 	} break;
 	case ED_CMD_EDIT: {
 		return ed_cmd_edit(line);
@@ -644,7 +639,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_write(line);
 	} break;
 	case ED_CMD_JOIN: {
-		return ed_cmd_join(address, address_type);
+		return ed_cmd_join(address);
 	} break;
 	case ED_CMD_LAST_ERR: {
 		ed_print_error();
