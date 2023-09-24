@@ -406,6 +406,32 @@ bool ed_cmd_insert(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_write(char *line)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (strlen(line) != 0) {
+		free(context->filename);
+		context->filename = strdup(line);
+	}
+
+	if (context->filename == NULL || strlen(context->filename) == 0) {
+		context->error = ED_ERROR_INVALID_COMMAND;
+		return false;
+	}
+
+	FILE *f = fopen(context->filename, "w");
+	if (f == NULL) {
+		context->error = ED_ERROR_INVALID_FILE;
+		return false;
+	}
+
+	lb_write_to_stream(context->buffer, f);
+	fclose(f);
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -553,25 +579,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return result;
 	} break;
 	case ED_CMD_WRITE: {
-		if (strlen(line) != 0) {
-			free(context->filename);
-			context->filename = strdup(line);
-		}
-
-		if (context->filename == NULL ||
-		    strlen(context->filename) == 0) {
-			context->error = ED_ERROR_INVALID_COMMAND;
-			return false;
-		}
-
-		FILE *f = fopen(context->filename, "w");
-		if (f == NULL) {
-			context->error = ED_ERROR_INVALID_FILE;
-			return false;
-		}
-
-		lb_write_to_stream(context->buffer, f);
-		fclose(f);
+		return ed_cmd_write(line);
 	} break;
 	case ED_CMD_JOIN: {
 		size_t start, end;
