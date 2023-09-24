@@ -492,6 +492,27 @@ bool ed_cmd_put(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_edit(char *line)
+{
+	Ed_Context *context = &ed_global_context;
+
+	context->filename = strdup(line);
+
+	FILE *f = fopen(line, "r");
+	if (f == NULL) {
+		context->error = ED_ERROR_INVALID_FILE;
+		return false;
+	}
+
+	bool result = lb_read_file(&context->buffer, f);
+	context->line = context->buffer.count > 0 ? context->buffer.count - 1 :
+						    0;
+	fclose(f);
+	if (!result)
+		context->error = ED_ERROR_UNKNOWN;
+	return result;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -578,22 +599,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_put(address, address_type);
 	} break;
 	case ED_CMD_EDIT: {
-		context->filename = strdup(line);
-
-		FILE *f = fopen(line, "r");
-		if (f == NULL) {
-			context->error = ED_ERROR_INVALID_FILE;
-			return false;
-		}
-
-		bool result = lb_read_file(&context->buffer, f);
-		context->line = context->buffer.count > 0 ?
-					context->buffer.count - 1 :
-					0;
-		fclose(f);
-		if (!result)
-			context->error = ED_ERROR_UNKNOWN;
-		return result;
+		return ed_cmd_edit(line);
 	} break;
 	case ED_CMD_WRITE: {
 		return ed_cmd_write(line);
