@@ -569,23 +569,20 @@ bool ed_cmd_change(Ed_Address address, Ed_Address_Type address_type)
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
 		lb_overwrite(&context->buffer, &lb, start, start);
-		free(lb.items);
 	} else {
 		if (context->yank_register.items != NULL) {
 			lb_clear(context->yank_register);
 		}
 
-		size_t index = line_to_index(address.as_range.start);
-		lb_foreach(line, context->buffer)
-		{
-			index += 1;
-			if (index < address.as_range.end) {
-				lb_append(&context->yank_register,
-					  strdup(*line));
-				lb_pop_line(&context->buffer, index);
-			}
+		size_t start = line_to_index(address.as_range.start);
+		size_t end = line_to_index(address.as_range.end);
+
+		for (size_t i = start; i <= end; ++i) {
+			lb_append(&context->yank_register,
+				  strdup(context->buffer.items[i]));
 		}
-		lb_insert(&context->buffer, &lb, address.as_range.start);
+
+		lb_overwrite(&context->buffer, &lb, start, end);
 	}
 
 	return true;

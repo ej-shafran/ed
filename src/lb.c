@@ -42,16 +42,17 @@ void lb_overwrite(Line_Builder *target, Line_Builder *source, size_t start,
 {
 	assert(end < target->count);
 
-	size_t amount = end - start;
+	size_t amount = end + 1 - start;
 
-	realloc_chunk(target, source->count - amount);
+	realloc_chunk(target, source->count + amount);
+
+	for (size_t i = start; i <= end; ++i)
+		free(target->items[i]);
 
 	memmove(target->items + start + source->count, target->items + end + 1,
 		(target->count - end - 1) * sizeof(*target->items));
 	target->count += source->count - amount;
 
-	for (size_t i = start; i <= end; ++i)
-		free(target->items[i]);
 	memcpy(target->items + start, source->items,
 	       source->count * sizeof(*source->items)); // maybe no *?
 }
