@@ -513,6 +513,40 @@ bool ed_cmd_edit(char *line)
 	return result;
 }
 
+bool ed_cmd_join(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	size_t start, end;
+	if (address_type == ED_ADDRESS_START) {
+		start = line_to_index(address.as_start);
+		end = start + 1;
+	} else {
+		start = line_to_index(address.as_range.start);
+		end = line_to_index(address.as_range.end);
+	}
+
+	if ((!lb_contains(context->buffer, start) && start != 0) ||
+	    !lb_contains(context->buffer, end)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	for (size_t i = start + 1; i <= end; ++i) {
+		int len = strlen(context->buffer.items[start]);
+		context->buffer.items[start][len - 1] = '\0';
+
+		char *result = strappend(context->buffer.items[start],
+					 context->buffer.items[i]);
+		free(context->buffer.items[start]);
+		context->buffer.items[start] = result;
+	}
+
+	lb_pop_range(&context->buffer, start + 1, end);
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -605,32 +639,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_write(line);
 	} break;
 	case ED_CMD_JOIN: {
-		size_t start, end;
-		if (address_type == ED_ADDRESS_START) {
-			start = line_to_index(address.as_start);
-			end = start + 1;
-		} else {
-			start = line_to_index(address.as_range.start);
-			end = line_to_index(address.as_range.end);
-		}
-
-		if ((!lb_contains(context->buffer, start) && start != 0) ||
-		    !lb_contains(context->buffer, end)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		for (size_t i = start + 1; i <= end; ++i) {
-			int len = strlen(context->buffer.items[start]);
-			context->buffer.items[start][len - 1] = '\0';
-
-			char *result = strappend(context->buffer.items[start],
-						 context->buffer.items[i]);
-			free(context->buffer.items[start]);
-			context->buffer.items[start] = result;
-		}
-
-		lb_pop_range(&context->buffer, start + 1, end);
+		return ed_cmd_join(address, address_type);
 	} break;
 	case ED_CMD_LAST_ERR: {
 		ed_print_error();
