@@ -57,6 +57,7 @@ typedef enum {
 	ED_CMD_EDIT,
 	ED_CMD_WRITE,
 	ED_CMD_NUM,
+	ED_CMD_MOVE,
 	ED_CMD_PRINT,
 	ED_CMD_PRINT_NUM,
 	ED_CMD_QUIT,
@@ -240,6 +241,9 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		return ED_CMD_INSERT;
 	case 'j':
 		return ED_CMD_JOIN;
+	case 'm':
+		*line += 1;
+		return ED_CMD_MOVE;
 	case 'n':
 		return ED_CMD_NUM;
 	case 'p':
@@ -264,12 +268,11 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 	}
 }
 
-bool address_out_of_range(Ed_Address address, Ed_Address_Type type,
-			  bool allow_zero)
+bool address_out_of_range(Ed_Address address, bool allow_zero)
 {
 	Ed_Context *context = &ed_global_context;
 
-	switch (type) {
+	switch (address.type) {
 	case ED_ADDRESS_START: {
 		if (address.position.as_line == 0)
 			return !allow_zero;
@@ -309,11 +312,44 @@ bool ed_cmd_quit(bool *quit, bool force)
 	return true;
 }
 
+bool ed_cmd_move(char *line, Ed_Address address)
+{
+	Ed_Context *context = &ed_global_context;
+
+	Ed_Address target = ed_parse_address(&line);
+	if (target.type != ED_ADDRESS_START ||
+	    address_out_of_range(address, false) ||
+	    address_out_of_range(target, true)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	Line_Builder lb = { 0 };
+	if (address.type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.position.as_line);
+
+		lb_append(&lb, strdup(context->buffer.items[start]));
+		lb_pop_line(&context->buffer, start);
+	} else {
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = address.position.as_range.end;
+		for (size_t i = start; i < end; ++i) {
+			lb_append(&lb, strdup(context->buffer.items[i]));
+		}
+
+		lb_pop_range(&context->buffer, start, end - 1);
+	}
+
+	lb_insert(&context->buffer, &lb, target.position.as_line);
+	context->has_changes = true;
+	return true;
+}
+
 bool ed_cmd_num(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, false)) {
+	if (address_out_of_range(address, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -332,7 +368,7 @@ bool ed_cmd_print(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, false)) {
+	if (address_out_of_range(address, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -352,7 +388,7 @@ bool ed_cmd_print_num(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, false)) {
+	if (address_out_of_range(address, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -373,7 +409,7 @@ bool ed_cmd_append(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 	if (address.type != ED_ADDRESS_START ||
-	    address_out_of_range(address, address.type, true)) {
+	    address_out_of_range(address, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -397,7 +433,7 @@ bool ed_cmd_insert(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 	if (address.type != ED_ADDRESS_START ||
-	    address_out_of_range(address, address.type, true)) {
+	    address_out_of_range(address, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -448,7 +484,7 @@ bool ed_cmd_delete(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, false)) {
+	if (address_out_of_range(address, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -486,7 +522,7 @@ bool ed_cmd_put(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, true)) {
+	if (address_out_of_range(address, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -566,7 +602,7 @@ bool ed_cmd_change(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, address.type, false)) {
+	if (address_out_of_range(address, false)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
 	}
@@ -630,6 +666,9 @@ bool ed_handle_cmd(char *line, bool *quit)
 	} break;
 	case ED_CMD_FORCE_QUIT: {
 		return ed_cmd_quit(quit, true);
+	} break;
+	case ED_CMD_MOVE: {
+		return ed_cmd_move(line, address);
 	} break;
 	case ED_CMD_NUM: {
 		return ed_cmd_num(address);
