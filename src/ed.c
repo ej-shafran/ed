@@ -547,6 +547,50 @@ bool ed_cmd_join(Ed_Address address, Ed_Address_Type address_type)
 	return true;
 }
 
+bool ed_cmd_change(Ed_Address address, Ed_Address_Type address_type)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, address_type, false)) {
+		context->error = ED_ERROR_INVALID_ADDRESS;
+		return false;
+	}
+
+	Line_Builder lb = { 0 };
+	bool result = lb_read_to_dot(&lb);
+	if (!result) {
+		context->error = ED_ERROR_UNKNOWN;
+		return false;
+	}
+
+	if (address_type == ED_ADDRESS_START) {
+		size_t start = line_to_index(address.as_start);
+
+		lb_append(&context->yank_register,
+			  strdup(context->buffer.items[start]));
+		lb_overwrite(&context->buffer, &lb, start, start);
+		free(lb.items);
+	} else {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t index = line_to_index(address.as_range.start);
+		lb_foreach(line, context->buffer)
+		{
+			index += 1;
+			if (index < address.as_range.end) {
+				lb_append(&context->yank_register,
+					  strdup(*line));
+				lb_pop_line(&context->buffer, index);
+			}
+		}
+		lb_insert(&context->buffer, &lb, address.as_range.start);
+	}
+
+	return true;
+}
+
 // API
 bool ed_handle_cmd(char *line, bool *quit)
 {
@@ -588,43 +632,7 @@ bool ed_handle_cmd(char *line, bool *quit)
 		return ed_cmd_insert(address, address_type);
 	} break;
 	case ED_CMD_CHANGE: {
-		if (address_out_of_range(address, address_type, false)) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		}
-
-		Line_Builder lb = { 0 };
-		bool result = lb_read_to_dot(&lb);
-		if (!result) {
-			context->error = ED_ERROR_UNKNOWN;
-			return false;
-		}
-
-		if (address_type == ED_ADDRESS_START) {
-			size_t start = line_to_index(address.as_start);
-
-			lb_append(&context->yank_register,
-				  strdup(context->buffer.items[start]));
-			lb_overwrite(&context->buffer, &lb, start, start);
-			free(lb.items);
-		} else {
-			if (context->yank_register.items != NULL) {
-				lb_clear(context->yank_register);
-			}
-
-			size_t index = line_to_index(address.as_range.start);
-			lb_foreach(line, context->buffer)
-			{
-				index += 1;
-				if (index < address.as_range.end) {
-					lb_append(&context->yank_register,
-						  strdup(*line));
-					lb_pop_line(&context->buffer, index);
-				}
-			}
-			lb_insert(&context->buffer, &lb,
-				  address.as_range.start);
-		}
+		return ed_cmd_change(address, address_type);
 	} break;
 	case ED_CMD_DELETE: {
 		return ed_cmd_delete(address, address_type);
