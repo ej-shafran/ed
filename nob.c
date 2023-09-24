@@ -28,7 +28,7 @@ void main_usage(FILE *stream)
 
 void test_usage(FILE *stream)
 {
-	fprintf(stream, "Usage: ./nob test\n");
+	fprintf(stream, "Usage: ./nob test [OPTIONS]\n");
 	fprintf(stream, "\n");
 	fprintf(stream, "Options:\n");
 	flag_print_options(stream);
