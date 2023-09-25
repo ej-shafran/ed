@@ -8,25 +8,20 @@
 
 // STRING UTILS
 
-char *ltrim(char *s)
-{
-	while (isspace(*s))
-		s++;
-	return s;
-}
-
-char *rtrim(char *s)
-{
-	char *back = s + strlen(s);
-	while (isspace(*--back))
-		;
-	*(back + 1) = '\0';
-	return s;
-}
-
 char *trim(char *s)
 {
-	return rtrim(ltrim(s));
+	// trim off left end
+	while (isspace(*s))
+		++s;
+
+	// pointer to the end of the string (excluding '\0')
+	char *back = s + strlen(s) - 1;
+	// trim off right end
+	while (isspace(*back))
+		--back;
+	*(back + 1) = '\0';
+
+	return s;
 }
 
 char *strappend(char *a, char *b)
