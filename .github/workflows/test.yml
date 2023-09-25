@@ -1,0 +1,24 @@
+name: Test (Linux Only)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install compiler
+        id: install_cc 
+        uses: rlalik/setup-cpp-compiler@master
+        with:
+          compiler: latest
+      - name: Bootstrap
+        run: ${{ steps.install_cc.outputs.cc }} -o nob ./nob.c
+      - name: Run Tests (uses bash)
+        shell: bash
+        run: ./nob test
