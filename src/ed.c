@@ -808,9 +808,8 @@ void ed_print_error()
 	Ed_Context *context = &ed_global_context;
 
 	switch (context->error) {
-	case ED_ERROR_NO_ERROR: {
-		fprintf(stderr, "No error.\n");
-	} break;
+	case ED_ERROR_NO_ERROR:
+		break;
 	case ED_ERROR_INVALID_ADDRESS: {
 		fprintf(stderr, "Invalid address.\n");
 	} break;
