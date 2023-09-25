@@ -65,6 +65,7 @@ typedef enum {
 	ED_CMD_QUIT,
 	ED_CMD_TOGGLE_ERR,
 	ED_CMD_TOGGLE_PROMPT,
+	ED_CMD_UNDO,
 	ED_CMD_WRITE,
 	ED_CMD_INVALID,
 } Ed_Cmd_Type;
@@ -310,6 +311,8 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		return ED_CMD_QUIT;
 	case 'Q':
 		return ED_CMD_FORCE_QUIT;
+	case 'u':
+		return ED_CMD_UNDO;
 	case 'w':
 		*line += 1;
 		*line = trim(*line);
@@ -638,6 +641,11 @@ bool ed_cmd_put(Ed_Address address)
 	return true;
 }
 
+bool ed_cmd_undo()
+{
+	ed_return_error(ED_ERROR_UNKNOWN);
+}
+
 bool ed_cmd_write(char *line)
 {
 	Ed_Context *context = &ed_global_context;
@@ -734,6 +742,9 @@ bool ed_handle_cmd(char *line, bool *quit)
 	case ED_CMD_TOGGLE_PROMPT: {
 		context->prompt = !context->prompt;
 		return true;
+	} break;
+	case ED_CMD_UNDO: {
+		return ed_cmd_undo();
 	} break;
 	case ED_CMD_WRITE: {
 		return ed_cmd_write(line);
