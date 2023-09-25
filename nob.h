@@ -633,7 +633,7 @@ bool nob_proc_wait(Nob_Proc proc)
 
 	CloseHandle(proc);
 
-	return false;
+	return true;
 #else
 	for (;;) {
 		int wstatus = 0;
