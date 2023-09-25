@@ -75,7 +75,7 @@ typedef struct {
 } Ed_Range;
 
 typedef enum {
-	ED_ADDRESS_START = 0,
+	ED_ADDRESS_LINE = 0,
 	ED_ADDRESS_RANGE,
 	ED_ADDRESS_INVALID
 } Ed_Address_Type;
@@ -160,14 +160,14 @@ Ed_Address ed_parse_address(char **line)
 			goto defer;
 		} else {
 			address.position.as_line = context->line;
-			result = ED_ADDRESS_START;
+			result = ED_ADDRESS_LINE;
 			goto defer;
 		}
 	}
 
 	if (*c != ',') {
 		address.position.as_line = start;
-		result = ED_ADDRESS_START;
+		result = ED_ADDRESS_LINE;
 		goto defer;
 	}
 
@@ -202,7 +202,7 @@ Ed_Address ed_parse_address(char **line)
 
 	if (start == end) {
 		address.position.as_line = start;
-		result = ED_ADDRESS_START;
+		result = ED_ADDRESS_LINE;
 		goto defer;
 	}
 
@@ -273,7 +273,7 @@ bool address_out_of_range(Ed_Address address, bool allow_zero)
 	Ed_Context *context = &ed_global_context;
 
 	switch (address.type) {
-	case ED_ADDRESS_START: {
+	case ED_ADDRESS_LINE: {
 		if (address.position.as_line == 0)
 			return !allow_zero;
 		size_t start = line_to_index(address.position.as_line);
@@ -317,7 +317,7 @@ bool ed_cmd_move(char *line, Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	Ed_Address target = ed_parse_address(&line);
-	if (target.type != ED_ADDRESS_START ||
+	if (target.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, false) ||
 	    address_out_of_range(target, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
@@ -325,7 +325,7 @@ bool ed_cmd_move(char *line, Ed_Address address)
 	}
 
 	Line_Builder lb = { 0 };
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
 
 		lb_append(&lb, strdup(context->buffer.items[start]));
@@ -354,7 +354,7 @@ bool ed_cmd_num(Ed_Address address)
 		return false;
 	}
 
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		printf("%zu\n", address.position.as_line);
 	} else {
 		lb_num(context->buffer, address.position.as_range.start,
@@ -373,7 +373,7 @@ bool ed_cmd_print(Ed_Address address)
 		return false;
 	}
 
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
 		printf("%s", context->buffer.items[start]);
 	} else {
@@ -393,7 +393,7 @@ bool ed_cmd_print_num(Ed_Address address)
 		return false;
 	}
 
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
 		printf("%zu     %s", address.position.as_line,
 		       context->buffer.items[start]);
@@ -408,7 +408,7 @@ bool ed_cmd_print_num(Ed_Address address)
 bool ed_cmd_append(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
-	if (address.type != ED_ADDRESS_START ||
+	if (address.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
@@ -432,7 +432,7 @@ bool ed_cmd_append(Ed_Address address)
 bool ed_cmd_insert(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
-	if (address.type != ED_ADDRESS_START ||
+	if (address.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, true)) {
 		context->error = ED_ERROR_INVALID_ADDRESS;
 		return false;
@@ -489,7 +489,7 @@ bool ed_cmd_delete(Ed_Address address)
 		return false;
 	}
 
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		if (context->yank_register.items != NULL) {
 			lb_clear(context->yank_register);
 		}
@@ -534,7 +534,7 @@ bool ed_cmd_put(Ed_Address address)
 	}
 
 	lb_insert(&context->buffer, &tmp,
-		  address.type == ED_ADDRESS_START ?
+		  address.type == ED_ADDRESS_LINE ?
 			  address.position.as_line :
 			  address.position.as_range.end);
 	free(tmp.items);
@@ -569,7 +569,7 @@ bool ed_cmd_join(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	size_t start, end;
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		start = line_to_index(address.position.as_line);
 		end = start + 1;
 	} else {
@@ -614,7 +614,7 @@ bool ed_cmd_change(Ed_Address address)
 		return false;
 	}
 
-	if (address.type == ED_ADDRESS_START) {
+	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
 
 		lb_append(&context->yank_register,
@@ -640,6 +640,8 @@ bool ed_cmd_change(Ed_Address address)
 }
 
 // API
+
+
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
@@ -649,7 +651,8 @@ bool ed_handle_cmd(char *line, bool *quit)
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
 	case ED_CMD_INVALID: {
-		if (address.type != ED_ADDRESS_START) {
+		// TODO: handle this better
+		if (address.type != ED_ADDRESS_LINE) {
 			context->error = ED_ERROR_INVALID_COMMAND;
 			return false;
 		} else if (!lb_contains(
