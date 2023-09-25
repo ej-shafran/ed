@@ -357,15 +357,176 @@ bool address_out_of_range(Ed_Address address, bool allow_zero)
 
 // COMMAND HANDLERS
 
-bool ed_cmd_quit(bool *quit, bool force)
+bool ed_cmd_append(Ed_Address address)
+{
+	Ed_Context *context = &ed_global_context;
+	if (address.type != ED_ADDRESS_LINE ||
+	    address_out_of_range(address, true)) {
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
+	}
+
+	Line_Builder lb = { 0 };
+	bool result = lb_read_to_dot(&lb);
+	if (!result) {
+		ed_return_error(ED_ERROR_UNKNOWN);
+	}
+
+	size_t amount = lb.count;
+	ed_context_insert(&lb, address.position.as_line);
+	context->line = address.position.as_line + amount;
+
+	return true;
+}
+
+bool ed_cmd_change(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (!force && context->has_changes) {
-		context->has_changes = false;
-		ed_return_error(ED_ERROR_UNSAVED_CHANGES);
+	if (address_out_of_range(address, false)) {
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
-	*quit = true;
+
+	Line_Builder lb = { 0 };
+	bool result = lb_read_to_dot(&lb);
+	if (!result) {
+		ed_return_error(ED_ERROR_UNKNOWN);
+	}
+
+	if (address.type == ED_ADDRESS_LINE) {
+		size_t start = line_to_index(address.position.as_line);
+
+		lb_append(&context->yank_register,
+			  strdup(context->buffer.items[start]));
+		ed_context_overwrite(&lb, start, start);
+	} else {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = line_to_index(address.position.as_range.end);
+
+		for (size_t i = start; i <= end; ++i) {
+			lb_append(&context->yank_register,
+				  strdup(context->buffer.items[i]));
+		}
+
+		ed_context_overwrite(&lb, start, end);
+	}
+
+	return true;
+}
+
+bool ed_cmd_delete(Ed_Address address)
+{
+	Ed_Context *context = &ed_global_context;
+
+	if (address_out_of_range(address, false)) {
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
+	}
+
+	if (address.type == ED_ADDRESS_LINE) {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t start = line_to_index(address.position.as_line);
+
+		lb_append(&context->yank_register,
+			  strdup(context->buffer.items[start]));
+		ed_context_pop(start, start);
+	} else {
+		if (context->yank_register.items != NULL) {
+			lb_clear(context->yank_register);
+		}
+
+		size_t start = line_to_index(address.position.as_range.start);
+		size_t end = address.position.as_range.end;
+		for (size_t i = start; i < end; ++i) {
+			lb_append(&context->yank_register,
+				  strdup(context->buffer.items[i]));
+		}
+
+		ed_context_pop(start, end - 1);
+	}
+
+	return true;
+}
+
+bool ed_cmd_edit(char *line)
+{
+	Ed_Context *context = &ed_global_context;
+
+	context->filename = strdup(line);
+
+	FILE *f = fopen(line, "r");
+	if (f == NULL) {
+		ed_return_error(ED_ERROR_INVALID_FILE);
+	}
+
+	bool result = lb_read_file(&context->buffer, f);
+	context->line = context->buffer.count > 0 ? context->buffer.count - 1 :
+						    0;
+	fclose(f);
+
+	if (!result) {
+		ed_return_error(ED_ERROR_UNKNOWN);
+	}
+
+	return true;
+}
+
+bool ed_cmd_insert(Ed_Address address)
+{
+	Ed_Context *context = &ed_global_context;
+	if (address.type != ED_ADDRESS_LINE ||
+	    address_out_of_range(address, true)) {
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
+	}
+
+	Line_Builder lb = { 0 };
+	bool result = lb_read_to_dot(&lb);
+	if (!result) {
+		ed_return_error(ED_ERROR_UNKNOWN);
+	}
+
+	context->line = address.position.as_line;
+	ed_context_insert(&lb, line_to_index(context->line));
+	free(lb.items);
+
+	return true;
+}
+
+bool ed_cmd_join(Ed_Address address)
+{
+	Ed_Context *context = &ed_global_context;
+
+	size_t start, end;
+	if (address.type == ED_ADDRESS_LINE) {
+		start = line_to_index(address.position.as_line);
+		end = start + 1;
+	} else {
+		start = line_to_index(address.position.as_range.start);
+		end = line_to_index(address.position.as_range.end);
+	}
+
+	if ((!lb_contains(context->buffer, start) && start != 0) ||
+	    !lb_contains(context->buffer, end)) {
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
+	}
+
+	for (size_t i = start + 1; i <= end; ++i) {
+		int len = strlen(context->buffer.items[start]);
+		context->buffer.items[start][len - 1] = '\0';
+
+		char *result = strappend(context->buffer.items[start],
+					 context->buffer.items[i]);
+		free(context->buffer.items[start]);
+		context->buffer.items[start] = result;
+	}
+
+	ed_context_pop(start + 1, end);
+
 	return true;
 }
 
@@ -455,44 +616,24 @@ bool ed_cmd_print_num(Ed_Address address)
 	return true;
 }
 
-bool ed_cmd_append(Ed_Address address)
+bool ed_cmd_put(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
-	if (address.type != ED_ADDRESS_LINE ||
-	    address_out_of_range(address, true)) {
+
+	if (address_out_of_range(address, true)) {
 		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
-	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
-		ed_return_error(ED_ERROR_UNKNOWN);
+	Line_Builder tmp = { 0 };
+	lb_foreach(line, context->yank_register)
+	{
+		lb_append(&tmp, strdup(*line));
 	}
 
-	size_t amount = lb.count;
-	ed_context_insert(&lb, address.position.as_line);
-	context->line = address.position.as_line + amount;
-
-	return true;
-}
-
-bool ed_cmd_insert(Ed_Address address)
-{
-	Ed_Context *context = &ed_global_context;
-	if (address.type != ED_ADDRESS_LINE ||
-	    address_out_of_range(address, true)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
-	}
-
-	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
-		ed_return_error(ED_ERROR_UNKNOWN);
-	}
-
-	context->line = address.position.as_line;
-	ed_context_insert(&lb, line_to_index(context->line));
-	free(lb.items);
+	ed_context_insert(&tmp, address.type == ED_ADDRESS_LINE ?
+					address.position.as_line :
+					address.position.as_range.end);
+	free(tmp.items);
 
 	return true;
 }
@@ -521,156 +662,15 @@ bool ed_cmd_write(char *line)
 	return true;
 }
 
-bool ed_cmd_delete(Ed_Address address)
+bool ed_cmd_quit(bool *quit, bool force)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (address_out_of_range(address, false)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
+	if (!force && context->has_changes) {
+		context->has_changes = false;
+		ed_return_error(ED_ERROR_UNSAVED_CHANGES);
 	}
-
-	if (address.type == ED_ADDRESS_LINE) {
-		if (context->yank_register.items != NULL) {
-			lb_clear(context->yank_register);
-		}
-
-		size_t start = line_to_index(address.position.as_line);
-
-		lb_append(&context->yank_register,
-			  strdup(context->buffer.items[start]));
-		ed_context_pop(start, start);
-	} else {
-		if (context->yank_register.items != NULL) {
-			lb_clear(context->yank_register);
-		}
-
-		size_t start = line_to_index(address.position.as_range.start);
-		size_t end = address.position.as_range.end;
-		for (size_t i = start; i < end; ++i) {
-			lb_append(&context->yank_register,
-				  strdup(context->buffer.items[i]));
-		}
-
-		ed_context_pop(start, end - 1);
-	}
-
-	return true;
-}
-
-bool ed_cmd_put(Ed_Address address)
-{
-	Ed_Context *context = &ed_global_context;
-
-	if (address_out_of_range(address, true)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
-	}
-
-	Line_Builder tmp = { 0 };
-	lb_foreach(line, context->yank_register)
-	{
-		lb_append(&tmp, strdup(*line));
-	}
-
-	ed_context_insert(&tmp, address.type == ED_ADDRESS_LINE ?
-					address.position.as_line :
-					address.position.as_range.end);
-	free(tmp.items);
-
-	return true;
-}
-
-bool ed_cmd_edit(char *line)
-{
-	Ed_Context *context = &ed_global_context;
-
-	context->filename = strdup(line);
-
-	FILE *f = fopen(line, "r");
-	if (f == NULL) {
-		ed_return_error(ED_ERROR_INVALID_FILE);
-	}
-
-	bool result = lb_read_file(&context->buffer, f);
-	context->line = context->buffer.count > 0 ? context->buffer.count - 1 :
-						    0;
-	fclose(f);
-
-	if (!result) {
-		ed_return_error(ED_ERROR_UNKNOWN);
-	}
-
-	return true;
-}
-
-bool ed_cmd_join(Ed_Address address)
-{
-	Ed_Context *context = &ed_global_context;
-
-	size_t start, end;
-	if (address.type == ED_ADDRESS_LINE) {
-		start = line_to_index(address.position.as_line);
-		end = start + 1;
-	} else {
-		start = line_to_index(address.position.as_range.start);
-		end = line_to_index(address.position.as_range.end);
-	}
-
-	if ((!lb_contains(context->buffer, start) && start != 0) ||
-	    !lb_contains(context->buffer, end)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
-	}
-
-	for (size_t i = start + 1; i <= end; ++i) {
-		int len = strlen(context->buffer.items[start]);
-		context->buffer.items[start][len - 1] = '\0';
-
-		char *result = strappend(context->buffer.items[start],
-					 context->buffer.items[i]);
-		free(context->buffer.items[start]);
-		context->buffer.items[start] = result;
-	}
-
-	ed_context_pop(start + 1, end);
-
-	return true;
-}
-
-bool ed_cmd_change(Ed_Address address)
-{
-	Ed_Context *context = &ed_global_context;
-
-	if (address_out_of_range(address, false)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
-	}
-
-	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
-		ed_return_error(ED_ERROR_UNKNOWN);
-	}
-
-	if (address.type == ED_ADDRESS_LINE) {
-		size_t start = line_to_index(address.position.as_line);
-
-		lb_append(&context->yank_register,
-			  strdup(context->buffer.items[start]));
-		ed_context_overwrite(&lb, start, start);
-	} else {
-		if (context->yank_register.items != NULL) {
-			lb_clear(context->yank_register);
-		}
-
-		size_t start = line_to_index(address.position.as_range.start);
-		size_t end = line_to_index(address.position.as_range.end);
-
-		for (size_t i = start; i <= end; ++i) {
-			lb_append(&context->yank_register,
-				  strdup(context->buffer.items[i]));
-		}
-
-		ed_context_overwrite(&lb, start, end);
-	}
-
+	*quit = true;
 	return true;
 }
 
