@@ -123,11 +123,11 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .should_print_error = false,
 				 .has_changes = false };
 
-// Parse a address from user input.
+// Parse an address from user input.
 //
-// Returns `ED_ADDRESS_INVALID` upon failure.
-// Sets `address` upon success, and `line` is updated to point to after the address.
-// The return value specifies which member of the union for `address` has been set.
+// Returns an address with type `ED_ADDRESS_INVALID` upon failure.
+// `line` is updated to point to after the address specifier.
+// TODO: rewrite this to be more readable and to handle other cases
 Ed_Address ed_parse_address(char **line)
 {
 	Ed_Address address = { 0 };
@@ -219,6 +219,7 @@ defer:
 
 // Parse a command type from user input.
 //
+// `line` is updated for commands where it needs to be.
 // Returns `ED_CMD_INVALID` upon failure.
 Ed_Cmd_Type ed_parse_cmd_type(char **line)
 {
