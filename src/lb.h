@@ -6,6 +6,7 @@
 #include "../da.h"
 
 #ifdef _WIN32
+#include "./getline.h"
 #define PRISize "%llu"
 #else
 #define PRISize "%zu"
