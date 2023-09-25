@@ -13,6 +13,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Install compiler
         id: install_cc 
         uses: rlalik/setup-cpp-compiler@master
