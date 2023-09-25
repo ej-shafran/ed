@@ -5,6 +5,12 @@
 #include <stdbool.h>
 #include "../da.h"
 
+#ifdef _WIN32
+#define PRISize "%llu"
+#else
+#define PRISize "%zu"
+#endif // _WIN32
+
 // Dynamic array of lines (nul-terminated with the '\n' at the end)
 typedef da(char *) Line_Builder;
 
@@ -66,7 +72,7 @@ void lb_clone(Line_Builder *a, Line_Builder *b);
 #define lb_num(start, end)                          \
 	do {                                            \
 		for (size_t i = start - 1; i < end; ++i) { \
-			printf("%lu\n", i + 1);             \
+			printf(PRISize "\n", i + 1);             \
 		}                                       \
 	} while (0);
 
@@ -74,7 +80,7 @@ void lb_clone(Line_Builder *a, Line_Builder *b);
 #define lb_printn(lb, start, end)                             \
 	do {                                                  \
 		for (size_t i = start - 1; i < end; ++i) {       \
-			printf("%lu     %s", i + 1, lb.items[i]); \
+			printf(PRISize "     %s", i + 1, lb.items[i]); \
 		}                                             \
 	} while (0);
 

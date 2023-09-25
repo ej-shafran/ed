@@ -584,7 +584,7 @@ bool ed_cmd_num(Ed_Address address)
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
-		printf("%lu\n", address.position.as_line);
+		printf(PRISize "\n", address.position.as_line);
 	} else {
 		lb_num(address.position.as_range.start,
 		       address.position.as_range.end);
@@ -622,7 +622,7 @@ bool ed_cmd_print_num(Ed_Address address)
 
 	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
-		printf("%lu     %s", address.position.as_line,
+		printf(PRISize "     %s", address.position.as_line,
 		       context->buffer.items[start]);
 	} else {
 		lb_printn(context->buffer, address.position.as_range.start,
