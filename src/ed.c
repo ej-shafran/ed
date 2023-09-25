@@ -118,6 +118,27 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .should_print_error = false,
 				 .has_changes = false };
 
+void ed_context_pop(size_t start, size_t end)
+{
+	Ed_Context *context = &ed_global_context;
+	lb_pop(&context->buffer, start, end);
+	context->has_changes = true;
+}
+
+void ed_context_insert(Line_Builder *lb, size_t index)
+{
+	Ed_Context *context = &ed_global_context;
+	lb_insert(&context->buffer, lb, index);
+	context->has_changes = true;
+}
+
+void ed_context_overwrite(Line_Builder *lb, size_t start, size_t end)
+{
+	Ed_Context *context = &ed_global_context;
+	lb_overwrite(&context->buffer, lb, start, end);
+	context->has_changes = true;
+}
+
 // Parse an address from user input.
 //
 // Returns an address with type `ED_ADDRESS_INVALID` upon failure.
@@ -325,7 +346,7 @@ bool ed_cmd_move(char *line, Ed_Address address)
 		size_t start = line_to_index(address.position.as_line);
 
 		lb_append(&lb, strdup(context->buffer.items[start]));
-		lb_pop_line(&context->buffer, start);
+		ed_context_pop(start, start);
 	} else {
 		size_t start = line_to_index(address.position.as_range.start);
 		size_t end = address.position.as_range.end;
@@ -333,11 +354,10 @@ bool ed_cmd_move(char *line, Ed_Address address)
 			lb_append(&lb, strdup(context->buffer.items[i]));
 		}
 
-		lb_pop_range(&context->buffer, start, end - 1);
+		ed_context_pop(start, end - 1);
 	}
 
-	lb_insert(&context->buffer, &lb, target.position.as_line);
-	context->has_changes = true;
+	ed_context_insert(&lb, target.position.as_line);
 	return true;
 }
 
@@ -418,10 +438,9 @@ bool ed_cmd_append(Ed_Address address)
 	}
 
 	size_t amount = lb.count;
-	lb_insert(&context->buffer, &lb, address.position.as_line);
+	ed_context_insert(&lb, address.position.as_line);
 	context->line = address.position.as_line + amount;
 
-	context->has_changes = true;
 	return true;
 }
 
@@ -442,10 +461,9 @@ bool ed_cmd_insert(Ed_Address address)
 	}
 
 	context->line = address.position.as_line;
-	lb_insert(&context->buffer, &lb, line_to_index(context->line));
+	ed_context_insert(&lb, line_to_index(context->line));
 	free(lb.items);
 
-	context->has_changes = true;
 	return true;
 }
 
@@ -472,7 +490,6 @@ bool ed_cmd_write(char *line)
 	lb_write_to_stream(context->buffer, f);
 	fclose(f);
 
-	context->has_changes = false;
 	return true;
 }
 
@@ -494,7 +511,7 @@ bool ed_cmd_delete(Ed_Address address)
 
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
-		lb_pop_line(&context->buffer, start);
+		ed_context_pop(start, start);
 	} else {
 		if (context->yank_register.items != NULL) {
 			lb_clear(context->yank_register);
@@ -507,10 +524,9 @@ bool ed_cmd_delete(Ed_Address address)
 				  strdup(context->buffer.items[i]));
 		}
 
-		lb_pop_range(&context->buffer, start, end - 1);
+		ed_context_pop(start, end - 1);
 	}
 
-	context->has_changes = true;
 	return true;
 }
 
@@ -529,13 +545,12 @@ bool ed_cmd_put(Ed_Address address)
 		lb_append(&tmp, strdup(*line));
 	}
 
-	lb_insert(&context->buffer, &tmp,
+	ed_context_insert(&tmp,
 		  address.type == ED_ADDRESS_LINE ?
 			  address.position.as_line :
 			  address.position.as_range.end);
 	free(tmp.items);
 
-	context->has_changes = true;
 	return true;
 }
 
@@ -589,7 +604,7 @@ bool ed_cmd_join(Ed_Address address)
 		context->buffer.items[start] = result;
 	}
 
-	lb_pop_range(&context->buffer, start + 1, end);
+	ed_context_pop(start + 1, end);
 
 	return true;
 }
@@ -615,7 +630,7 @@ bool ed_cmd_change(Ed_Address address)
 
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
-		lb_overwrite(&context->buffer, &lb, start, start);
+		ed_context_overwrite(&lb, start, start);
 	} else {
 		if (context->yank_register.items != NULL) {
 			lb_clear(context->yank_register);
@@ -629,7 +644,7 @@ bool ed_cmd_change(Ed_Address address)
 				  strdup(context->buffer.items[i]));
 		}
 
-		lb_overwrite(&context->buffer, &lb, start, end);
+		ed_context_overwrite(&lb, start, end);
 	}
 
 	return true;

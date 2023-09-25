@@ -21,11 +21,8 @@ void lb_insert(Line_Builder *target, Line_Builder *source, size_t index);
 void lb_overwrite(Line_Builder *target, Line_Builder *source, size_t start,
 		  size_t end);
 
-// Remove the line at `index` from `target`.
-void lb_pop_line(Line_Builder *target, size_t index);
-
 // Remove the lines between `start` and `end` from `target`.
-void lb_pop_range(Line_Builder *target, size_t start, size_t end);
+void lb_pop(Line_Builder *target, size_t start, size_t end);
 
 // Check if `n` is within the range of `lb`.
 bool lb_contains(Line_Builder lb, size_t n);

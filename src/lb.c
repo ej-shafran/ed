@@ -57,18 +57,7 @@ void lb_overwrite(Line_Builder *target, Line_Builder *source, size_t start,
 	       source->count * sizeof(*source->items)); // maybe no *?
 }
 
-void lb_pop_line(Line_Builder *target, size_t index)
-{
-	assert(index < target->count);
-
-	free(target->items[index]);
-
-	memmove(target->items + index, target->items + index + 1,
-		(target->count - index - 1) * sizeof(*target->items));
-	target->count -= 1;
-}
-
-void lb_pop_range(Line_Builder *target, size_t start, size_t end)
+void lb_pop(Line_Builder *target, size_t start, size_t end)
 {
 	assert(end < target->count);
 
