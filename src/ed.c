@@ -126,14 +126,14 @@ typedef struct {
 } Ed_Context;
 
 // Instance of `Ed_Context` that is shared globally.
-Ed_Context ed_global_context = { .buffer = { 0 },
-				 .line = 0,
-				 .yank_register = { 0 },
-				 .filename = 0,
-				 .error = ED_ERROR_NO_ERROR,
-				 .prompt = false,
-				 .should_print_error = false,
-				 .has_changes = false };
+static Ed_Context ed_global_context = { .buffer = { 0 },
+					.line = 0,
+					.yank_register = { 0 },
+					.filename = 0,
+					.error = ED_ERROR_NO_ERROR,
+					.prompt = false,
+					.should_print_error = false,
+					.has_changes = false };
 
 // Like `lb_pop` for the global context's buffer.
 void ed_context_pop(size_t start, size_t end)
@@ -167,9 +167,10 @@ void ed_context_set_error(Ed_Error error)
 }
 
 // Sets the global context's error and returns `false`.
-#define ed_return_error(error) do {				\
-		ed_context_set_error(error);			\
-		return false;							\
+#define ed_return_error(error)               \
+	do {                                 \
+		ed_context_set_error(error); \
+		return false;                \
 	} while (0);
 
 // PARSING
@@ -570,10 +571,9 @@ bool ed_cmd_put(Ed_Address address)
 		lb_append(&tmp, strdup(*line));
 	}
 
-	ed_context_insert(&tmp,
-		  address.type == ED_ADDRESS_LINE ?
-			  address.position.as_line :
-			  address.position.as_range.end);
+	ed_context_insert(&tmp, address.type == ED_ADDRESS_LINE ?
+					address.position.as_line :
+					address.position.as_range.end);
 	free(tmp.items);
 
 	return true;
