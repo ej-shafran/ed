@@ -139,6 +139,17 @@ void ed_context_overwrite(Line_Builder *lb, size_t start, size_t end)
 	context->has_changes = true;
 }
 
+void ed_context_set_error(Ed_Error error)
+{
+	Ed_Context *context = &ed_global_context;
+	context->error = error;
+}
+
+#define ed_return_error(error) do {				\
+		ed_context_set_error(error);			\
+		return false;							\
+	} while (0);
+
 // Parse an address from user input.
 //
 // Returns an address with type `ED_ADDRESS_INVALID` upon failure.
@@ -321,9 +332,8 @@ bool ed_cmd_quit(bool *quit, bool force)
 	Ed_Context *context = &ed_global_context;
 
 	if (!force && context->has_changes) {
-		context->error = ED_ERROR_UNSAVED_CHANGES;
 		context->has_changes = false;
-		return false;
+		ed_return_error(ED_ERROR_UNSAVED_CHANGES);
 	}
 	*quit = true;
 	return true;
@@ -337,8 +347,7 @@ bool ed_cmd_move(char *line, Ed_Address address)
 	if (target.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, false) ||
 	    address_out_of_range(target, true)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	Line_Builder lb = { 0 };
@@ -363,17 +372,14 @@ bool ed_cmd_move(char *line, Ed_Address address)
 
 bool ed_cmd_num(Ed_Address address)
 {
-	Ed_Context *context = &ed_global_context;
-
 	if (address_out_of_range(address, false)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
 		printf("%zu\n", address.position.as_line);
 	} else {
-		lb_num(context->buffer, address.position.as_range.start,
+		lb_num(address.position.as_range.start,
 		       address.position.as_range.end);
 	}
 
@@ -385,8 +391,7 @@ bool ed_cmd_print(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	if (address_out_of_range(address, false)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
@@ -405,8 +410,7 @@ bool ed_cmd_print_num(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	if (address_out_of_range(address, false)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
@@ -426,15 +430,13 @@ bool ed_cmd_append(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 	if (address.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, true)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	Line_Builder lb = { 0 };
 	bool result = lb_read_to_dot(&lb);
 	if (!result) {
-		context->error = ED_ERROR_UNKNOWN;
-		return false;
+		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
 	size_t amount = lb.count;
@@ -449,15 +451,13 @@ bool ed_cmd_insert(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 	if (address.type != ED_ADDRESS_LINE ||
 	    address_out_of_range(address, true)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	Line_Builder lb = { 0 };
 	bool result = lb_read_to_dot(&lb);
 	if (!result) {
-		context->error = ED_ERROR_UNKNOWN;
-		return false;
+		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
 	context->line = address.position.as_line;
@@ -477,14 +477,12 @@ bool ed_cmd_write(char *line)
 	}
 
 	if (context->filename == NULL || strlen(context->filename) == 0) {
-		context->error = ED_ERROR_INVALID_COMMAND;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_COMMAND);
 	}
 
 	FILE *f = fopen(context->filename, "w");
 	if (f == NULL) {
-		context->error = ED_ERROR_INVALID_FILE;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_FILE);
 	}
 
 	lb_write_to_stream(context->buffer, f);
@@ -498,8 +496,7 @@ bool ed_cmd_delete(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	if (address_out_of_range(address, false)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
@@ -535,8 +532,7 @@ bool ed_cmd_put(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	if (address_out_of_range(address, true)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	Line_Builder tmp = { 0 };
@@ -562,17 +558,19 @@ bool ed_cmd_edit(char *line)
 
 	FILE *f = fopen(line, "r");
 	if (f == NULL) {
-		context->error = ED_ERROR_INVALID_FILE;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_FILE);
 	}
 
 	bool result = lb_read_file(&context->buffer, f);
 	context->line = context->buffer.count > 0 ? context->buffer.count - 1 :
 						    0;
 	fclose(f);
-	if (!result)
-		context->error = ED_ERROR_UNKNOWN;
-	return result;
+
+	if (!result) {
+		ed_return_error(ED_ERROR_UNKNOWN);
+	}
+
+	return true;
 }
 
 bool ed_cmd_join(Ed_Address address)
@@ -590,8 +588,7 @@ bool ed_cmd_join(Ed_Address address)
 
 	if ((!lb_contains(context->buffer, start) && start != 0) ||
 	    !lb_contains(context->buffer, end)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	for (size_t i = start + 1; i <= end; ++i) {
@@ -614,15 +611,13 @@ bool ed_cmd_change(Ed_Address address)
 	Ed_Context *context = &ed_global_context;
 
 	if (address_out_of_range(address, false)) {
-		context->error = ED_ERROR_INVALID_ADDRESS;
-		return false;
+		ed_return_error(ED_ERROR_INVALID_ADDRESS);
 	}
 
 	Line_Builder lb = { 0 };
 	bool result = lb_read_to_dot(&lb);
 	if (!result) {
-		context->error = ED_ERROR_UNKNOWN;
-		return false;
+		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
 	if (address.type == ED_ADDRESS_LINE) {
@@ -717,13 +712,11 @@ bool ed_handle_cmd(char *line, bool *quit)
 	case ED_CMD_INVALID: {
 		// TODO: handle this better
 		if (address.type != ED_ADDRESS_LINE) {
-			context->error = ED_ERROR_INVALID_COMMAND;
-			return false;
+			ed_return_error(ED_ERROR_INVALID_COMMAND);
 		} else if (!lb_contains(
 				   context->buffer,
 				   line_to_index(address.position.as_line))) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
+			ed_return_error(ED_ERROR_INVALID_ADDRESS);
 		} else {
 			context->line = address.position.as_line;
 		}

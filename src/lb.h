@@ -57,7 +57,7 @@ bool lb_contains(Line_Builder lb, size_t n);
 	} while (0);
 
 // Print line numbers from `lb` into `STDOUT`
-#define lb_num(lb, start, end)                          \
+#define lb_num(start, end)                          \
 	do {                                            \
 		for (size_t i = start - 1; i < end; ++i) { \
 			printf("%zu\n", i + 1);             \
