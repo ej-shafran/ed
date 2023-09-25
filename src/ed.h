@@ -19,7 +19,7 @@ bool ed_should_print_error();
 // Print the last error that occured.
 void ed_print_error();
 
-// Get line after printint prompt.
+// Get line after printing prompt.
 ssize_t ed_getline(char **lineptr, size_t *n, FILE *stream);
 
 #endif // ED_H_

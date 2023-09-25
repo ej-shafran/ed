@@ -8,6 +8,7 @@
 
 // STRING UTILS
 
+// Trim a string of whitespace, from both ends.
 char *trim(char *s)
 {
 	// trim off left end
@@ -24,6 +25,9 @@ char *trim(char *s)
 	return s;
 }
 
+// Dynamically concatenate two strings, returning the result.
+//
+// The returned string is allocated with `calloc` and needs to be freed.
 char *strappend(char *a, char *b)
 {
 	int sizea = strlen(a);
@@ -43,6 +47,7 @@ char *strappend(char *a, char *b)
 
 // COMMANDS
 
+// Enumeration of all possible `ed` commands.
 typedef enum {
 	ED_CMD_APPEND = 0,
 	ED_CMD_CHANGE,
@@ -64,29 +69,39 @@ typedef enum {
 	ED_CMD_INVALID,
 } Ed_Cmd_Type;
 
+// ADDRESSES
+
+// A range of lines written as `start,end` before a command.
 typedef struct {
 	size_t start;
 	size_t end;
 } Ed_Range;
 
+// An enumeration of the possible states the `Ed_Address_Position` union can be in.
 typedef enum {
 	ED_ADDRESS_LINE = 0,
 	ED_ADDRESS_RANGE,
 	ED_ADDRESS_INVALID
 } Ed_Address_Type;
 
+// Either a line, specified as `number` before the command, or a range.
 typedef union {
 	size_t as_line;
 	Ed_Range as_range;
 } Ed_Address_Position;
 
+// The address over which a command takes place.
 typedef struct {
 	Ed_Address_Position position;
 	Ed_Address_Type type;
 } Ed_Address;
 
+// Convert a line number to an index within the buffer.
 #define line_to_index(line) ((line) == 0 ? 0 : (line)-1)
 
+// ERRORS
+
+// Enumeration over the possible errors which may occur.
 typedef enum {
 	ED_ERROR_NO_ERROR = 0,
 	ED_ERROR_INVALID_ADDRESS,
@@ -98,6 +113,7 @@ typedef enum {
 
 // CONTEXT
 
+// Struct with all of the global context for the application.
 typedef struct {
 	Line_Builder buffer;
 	size_t line;
@@ -109,6 +125,7 @@ typedef struct {
 	bool has_changes;
 } Ed_Context;
 
+// Instance of `Ed_Context` that is shared globally.
 Ed_Context ed_global_context = { .buffer = { 0 },
 				 .line = 0,
 				 .yank_register = { 0 },
@@ -118,6 +135,7 @@ Ed_Context ed_global_context = { .buffer = { 0 },
 				 .should_print_error = false,
 				 .has_changes = false };
 
+// Like `lb_pop` for the global context's buffer.
 void ed_context_pop(size_t start, size_t end)
 {
 	Ed_Context *context = &ed_global_context;
@@ -125,6 +143,7 @@ void ed_context_pop(size_t start, size_t end)
 	context->has_changes = true;
 }
 
+// Like `lb_insert` for the global context's buffer.
 void ed_context_insert(Line_Builder *lb, size_t index)
 {
 	Ed_Context *context = &ed_global_context;
@@ -132,6 +151,7 @@ void ed_context_insert(Line_Builder *lb, size_t index)
 	context->has_changes = true;
 }
 
+// Like `lb_overwrite` for the global context's buffer.
 void ed_context_overwrite(Line_Builder *lb, size_t start, size_t end)
 {
 	Ed_Context *context = &ed_global_context;
@@ -139,16 +159,20 @@ void ed_context_overwrite(Line_Builder *lb, size_t start, size_t end)
 	context->has_changes = true;
 }
 
+// Sets the global context's error.
 void ed_context_set_error(Ed_Error error)
 {
 	Ed_Context *context = &ed_global_context;
 	context->error = error;
 }
 
+// Sets the global context's error and returns `false`.
 #define ed_return_error(error) do {				\
 		ed_context_set_error(error);			\
 		return false;							\
 	} while (0);
+
+// PARSING
 
 // Parse an address from user input.
 //
@@ -296,6 +320,9 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 	}
 }
 
+// VALIDATION
+
+// Checks that an address is valid within the bounds of the context's buffer.
 bool address_out_of_range(Ed_Address address, bool allow_zero)
 {
 	Ed_Context *context = &ed_global_context;
@@ -326,6 +353,8 @@ bool address_out_of_range(Ed_Address address, bool allow_zero)
 	} break;
 	}
 }
+
+// COMMAND HANDLERS
 
 bool ed_cmd_quit(bool *quit, bool force)
 {
