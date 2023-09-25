@@ -1,0 +1,24 @@
+name: Build
+
+on: 
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install compiler
+        id: install_cc 
+        uses: rlalik/setup-cpp-compiler@master
+        with:
+          compiler: latest
+      - name: Bootstrap
+        run: ${{ steps.install_cc.outputs.cc }} -o nob ./nob.c
+      - name: Build
+        run: ./nob build
