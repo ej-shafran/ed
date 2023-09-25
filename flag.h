@@ -423,7 +423,7 @@ void flag_print_options(FILE *stream)
             fprintf(stream, "        Default: %" PRIu64 "\n", flag->def.as_uint64);
             break;
         case FLAG_SIZE:
-            fprintf(stream, "        Default: %zu\n", flag->def.as_size);
+            fprintf(stream, "        Default: %lu\n", flag->def.as_size);
             break;
         case FLAG_STR:
             if (flag->def.as_str) {

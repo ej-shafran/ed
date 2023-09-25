@@ -66,7 +66,7 @@ void lb_clone(Line_Builder *a, Line_Builder *b);
 #define lb_num(start, end)                          \
 	do {                                            \
 		for (size_t i = start - 1; i < end; ++i) { \
-			printf("%zu\n", i + 1);             \
+			printf("%lu\n", i + 1);             \
 		}                                       \
 	} while (0);
 
@@ -74,7 +74,7 @@ void lb_clone(Line_Builder *a, Line_Builder *b);
 #define lb_printn(lb, start, end)                             \
 	do {                                                  \
 		for (size_t i = start - 1; i < end; ++i) {       \
-			printf("%zu     %s", i + 1, lb.items[i]); \
+			printf("%lu     %s", i + 1, lb.items[i]); \
 		}                                             \
 	} while (0);
 
