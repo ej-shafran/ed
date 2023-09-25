@@ -50,23 +50,23 @@ char *strappend(char *a, char *b)
 
 typedef enum {
 	ED_CMD_APPEND = 0,
-	ED_CMD_INSERT,
 	ED_CMD_CHANGE,
 	ED_CMD_DELETE,
-	ED_CMD_PUT,
 	ED_CMD_EDIT,
-	ED_CMD_WRITE,
-	ED_CMD_NUM,
+	ED_CMD_FORCE_QUIT,
+	ED_CMD_INSERT,
+	ED_CMD_JOIN,
+	ED_CMD_LAST_ERR,
 	ED_CMD_MOVE,
+	ED_CMD_NUM,
 	ED_CMD_PRINT,
 	ED_CMD_PRINT_NUM,
+	ED_CMD_PUT,
 	ED_CMD_QUIT,
-	ED_CMD_FORCE_QUIT,
-	ED_CMD_LAST_ERR,
-	ED_CMD_TOGGLE_PROMPT,
 	ED_CMD_TOGGLE_ERR,
+	ED_CMD_TOGGLE_PROMPT,
+	ED_CMD_WRITE,
 	ED_CMD_INVALID,
-	ED_CMD_JOIN,
 } Ed_Cmd_Type;
 
 typedef struct {
@@ -94,8 +94,8 @@ typedef struct {
 
 typedef enum {
 	ED_ERROR_NO_ERROR = 0,
-	ED_ERROR_INVALID_COMMAND,
 	ED_ERROR_INVALID_ADDRESS,
+	ED_ERROR_INVALID_COMMAND,
 	ED_ERROR_INVALID_FILE,
 	ED_ERROR_UNSAVED_CHANGES,
 	ED_ERROR_UNKNOWN,
@@ -641,7 +641,6 @@ bool ed_cmd_change(Ed_Address address)
 
 // API
 
-
 bool ed_handle_cmd(char *line, bool *quit)
 {
 	Ed_Context *context = &ed_global_context;
@@ -650,25 +649,30 @@ bool ed_handle_cmd(char *line, bool *quit)
 
 	Ed_Cmd_Type cmd_type = ed_parse_cmd_type(&line);
 	switch (cmd_type) {
-	case ED_CMD_INVALID: {
-		// TODO: handle this better
-		if (address.type != ED_ADDRESS_LINE) {
-			context->error = ED_ERROR_INVALID_COMMAND;
-			return false;
-		} else if (!lb_contains(
-				   context->buffer,
-				   line_to_index(address.position.as_line))) {
-			context->error = ED_ERROR_INVALID_ADDRESS;
-			return false;
-		} else {
-			context->line = address.position.as_line;
-		}
+	case ED_CMD_APPEND: {
+		return ed_cmd_append(address);
 	} break;
-	case ED_CMD_QUIT: {
-		return ed_cmd_quit(quit, false);
+	case ED_CMD_CHANGE: {
+		return ed_cmd_change(address);
+	} break;
+	case ED_CMD_DELETE: {
+		return ed_cmd_delete(address);
+	} break;
+	case ED_CMD_EDIT: {
+		return ed_cmd_edit(line);
 	} break;
 	case ED_CMD_FORCE_QUIT: {
 		return ed_cmd_quit(quit, true);
+	} break;
+	case ED_CMD_INSERT: {
+		return ed_cmd_insert(address);
+	} break;
+	case ED_CMD_JOIN: {
+		return ed_cmd_join(address);
+	} break;
+	case ED_CMD_LAST_ERR: {
+		ed_print_error();
+		return true;
 	} break;
 	case ED_CMD_MOVE: {
 		return ed_cmd_move(line, address);
@@ -682,41 +686,36 @@ bool ed_handle_cmd(char *line, bool *quit)
 	case ED_CMD_PRINT_NUM: {
 		return ed_cmd_print_num(address);
 	} break;
-	case ED_CMD_APPEND: {
-		return ed_cmd_append(address);
-	} break;
-	case ED_CMD_INSERT: {
-		return ed_cmd_insert(address);
-	} break;
-	case ED_CMD_CHANGE: {
-		return ed_cmd_change(address);
-	} break;
-	case ED_CMD_DELETE: {
-		return ed_cmd_delete(address);
-	} break;
 	case ED_CMD_PUT: {
 		return ed_cmd_put(address);
 	} break;
-	case ED_CMD_EDIT: {
-		return ed_cmd_edit(line);
+	case ED_CMD_QUIT: {
+		return ed_cmd_quit(quit, false);
 	} break;
-	case ED_CMD_WRITE: {
-		return ed_cmd_write(line);
-	} break;
-	case ED_CMD_JOIN: {
-		return ed_cmd_join(address);
-	} break;
-	case ED_CMD_LAST_ERR: {
-		ed_print_error();
+	case ED_CMD_TOGGLE_ERR: {
+		context->should_print_error = !context->should_print_error;
 		return true;
 	} break;
 	case ED_CMD_TOGGLE_PROMPT: {
 		context->prompt = !context->prompt;
 		return true;
 	} break;
-	case ED_CMD_TOGGLE_ERR: {
-		context->should_print_error = !context->should_print_error;
-		return true;
+	case ED_CMD_WRITE: {
+		return ed_cmd_write(line);
+	} break;
+	case ED_CMD_INVALID: {
+		// TODO: handle this better
+		if (address.type != ED_ADDRESS_LINE) {
+			context->error = ED_ERROR_INVALID_COMMAND;
+			return false;
+		} else if (!lb_contains(
+				   context->buffer,
+				   line_to_index(address.position.as_line))) {
+			context->error = ED_ERROR_INVALID_ADDRESS;
+			return false;
+		} else {
+			context->line = address.position.as_line;
+		}
 	} break;
 	}
 
@@ -747,14 +746,14 @@ void ed_print_error()
 	case ED_ERROR_NO_ERROR: {
 		fprintf(stderr, "No error.\n");
 	} break;
+	case ED_ERROR_INVALID_ADDRESS: {
+		fprintf(stderr, "Invalid address.\n");
+	} break;
 	case ED_ERROR_INVALID_COMMAND: {
 		fprintf(stderr, "Invalid command.\n");
 	} break;
 	case ED_ERROR_INVALID_FILE: {
 		fprintf(stderr, "Could not open file.\n");
-	} break;
-	case ED_ERROR_INVALID_ADDRESS: {
-		fprintf(stderr, "Invalid address.\n");
 	} break;
 	case ED_ERROR_UNSAVED_CHANGES: {
 		fprintf(stderr, "Buffer has unsaved changes.\n");
