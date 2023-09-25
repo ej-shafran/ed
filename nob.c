@@ -140,7 +140,10 @@ bool build_command(int argc, char **argv, bool *help)
 {
 	bool *run_after =
 		flag_bool("-run", false, "Run executable after building");
+	bool *test_after =
+		flag_bool("-test", false, "Run tests after building");
 	flag_add_alias(run_after, "r");
+	flag_add_alias(test_after, "t");
 
 	if (!flag_parse(argc, argv)) {
 		build_usage(stderr);
@@ -154,6 +157,9 @@ bool build_command(int argc, char **argv, bool *help)
 
 	if (!build())
 		return false;
+
+	if (*test_after)
+		return test();
 
 	if (*run_after)
 		return run();
