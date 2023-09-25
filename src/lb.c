@@ -73,3 +73,27 @@ bool lb_contains(Line_Builder lb, size_t n)
 {
     return n < lb.count;
 }
+
+void lb_clone(Line_Builder *a, Line_Builder *b)
+{
+	lb_clear(*b);
+	lb_foreach(line, *a)
+	{
+		lb_append(b, strdup(*line));
+	}
+}
+
+void lb_swap(Line_Builder *a, Line_Builder *b)
+{
+	char **temp_items = b->items;
+	size_t temp_count = b->count;
+	size_t temp_cap = b->capacity;
+
+	b->items = a->items;
+	b->count = a->count;
+	b->capacity = a->capacity;
+
+	a->items = temp_items;
+	a->count = temp_count;
+	a->capacity = temp_cap;
+}

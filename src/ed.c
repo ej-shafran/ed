@@ -108,6 +108,7 @@ typedef enum {
 	ED_ERROR_INVALID_ADDRESS,
 	ED_ERROR_INVALID_COMMAND,
 	ED_ERROR_INVALID_FILE,
+	ED_ERROR_NO_UNDO,
 	ED_ERROR_UNSAVED_CHANGES,
 	ED_ERROR_UNKNOWN,
 } Ed_Error;
@@ -117,47 +118,59 @@ typedef enum {
 // Struct with all of the global context for the application.
 typedef struct {
 	Line_Builder buffer;
+	size_t change_count;
+	Line_Builder back_buf;
+	size_t back_changes;
+
 	size_t line;
 	char *filename;
 	Line_Builder yank_register;
 	Ed_Error error;
 	bool prompt;
 	bool should_print_error;
-	bool has_changes;
 } Ed_Context;
 
 // Instance of `Ed_Context` that is shared globally.
 static Ed_Context ed_global_context = { .buffer = { 0 },
+					.change_count = 0,
+					.back_buf = { 0 },
+					.back_changes = 0,
+
 					.line = 0,
 					.yank_register = { 0 },
 					.filename = 0,
 					.error = ED_ERROR_NO_ERROR,
 					.prompt = false,
-					.should_print_error = false,
-					.has_changes = false };
+					.should_print_error = false };
 
 // Like `lb_pop` for the global context's buffer.
 void ed_context_pop(size_t start, size_t end)
 {
 	Ed_Context *context = &ed_global_context;
+	lb_clone(&context->buffer, &context->back_buf);
+	context->back_changes = context->change_count;
 	lb_pop(&context->buffer, start, end);
-	context->has_changes = true;
+	context->change_count += 1;
 }
 
 // Like `lb_insert` for the global context's buffer.
 void ed_context_insert(Line_Builder *lb, size_t index)
 {
 	Ed_Context *context = &ed_global_context;
+	lb_clone(&context->buffer, &context->back_buf);
+	context->back_changes = context->change_count;
 	lb_insert(&context->buffer, lb, index);
-	context->has_changes = true;
+	context->change_count += 1;
 }
 
 // Like `lb_overwrite` for the global context's buffer.
 void ed_context_overwrite(Line_Builder *lb, size_t start, size_t end)
 {
 	Ed_Context *context = &ed_global_context;
+	lb_clone(&context->buffer, &context->back_buf);
+	context->back_changes = context->change_count;
 	lb_overwrite(&context->buffer, lb, start, end);
-	context->has_changes = true;
+	context->change_count += 1;
 }
 
 // Sets the global context's error.
@@ -643,7 +656,15 @@ bool ed_cmd_put(Ed_Address address)
 
 bool ed_cmd_undo()
 {
-	ed_return_error(ED_ERROR_UNKNOWN);
+	Ed_Context *context = &ed_global_context;
+	if (context->change_count == context->back_changes) {
+		ed_return_error(ED_ERROR_NO_UNDO);
+	}
+	lb_swap(&context->buffer, &context->back_buf);
+	size_t tmp = context->change_count;
+	context->change_count = context->back_changes;
+	context->back_changes = tmp;
+	return true;
 }
 
 bool ed_cmd_write(char *line)
@@ -674,8 +695,8 @@ bool ed_cmd_quit(bool *quit, bool force)
 {
 	Ed_Context *context = &ed_global_context;
 
-	if (!force && context->has_changes) {
-		context->has_changes = false;
+	if (!force && context->change_count > 0) {
+		context->change_count = 0;
 		ed_return_error(ED_ERROR_UNSAVED_CHANGES);
 	}
 	*quit = true;
@@ -798,6 +819,9 @@ void ed_print_error()
 	} break;
 	case ED_ERROR_INVALID_FILE: {
 		fprintf(stderr, "Could not open file.\n");
+	} break;
+	case ED_ERROR_NO_UNDO: {
+		fprintf(stderr, "Nothing to undo.\n");
 	} break;
 	case ED_ERROR_UNSAVED_CHANGES: {
 		fprintf(stderr, "Buffer has unsaved changes.\n");

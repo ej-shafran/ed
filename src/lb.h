@@ -27,6 +27,12 @@ void lb_pop(Line_Builder *target, size_t start, size_t end);
 // Check if `n` is within the range of `lb`.
 bool lb_contains(Line_Builder lb, size_t n);
 
+// Swap between `a` and `b`.
+void lb_swap(Line_Builder *a, Line_Builder *b);
+
+// Make `b` into a clone of `a`.
+void lb_clone(Line_Builder *a, Line_Builder *b);
+
 // Append a line to a `Line_Builder`
 #define lb_append(lb, line) da_append(lb, line)
 
@@ -85,10 +91,10 @@ bool lb_contains(Line_Builder lb, size_t n);
 
 #define lb_clear(lb)             \
 	do {                     \
-		lb_free(lb);     \
-		lb.count = 0;    \
-		lb.capacity = 0; \
-		lb.items = NULL; \
+		lb_free((lb));     \
+		(lb).count = 0;    \
+		(lb).capacity = 0; \
+		(lb).items = NULL; \
 	} while (0);
 
 #define realloc_chunk(target, amount)                                       \
