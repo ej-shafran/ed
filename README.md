@@ -20,7 +20,7 @@ You can build the project (the `nob` executable will rebuild itself):
 $ ./nob build
 ```
 
-Run `./nob run -h` to see options for the `test` subcommand.
+Run `./nob build -h` to see options for the `build` subcommand.
 
 ## Run
 
@@ -32,7 +32,7 @@ You can also run it using:
 $ ./nob run
 ```
 
-Run `./nob run -h` to see options for the `test` subcommand.
+Run `./nob run -h` to see options for the `run` subcommand.
 
 ## Tests
 
