@@ -407,19 +407,23 @@ bool ed_cmd_change(Ed_Address address)
 		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
+	if (context->yank_register.items != NULL) {
+		lb_clear(context->yank_register);
+	}
+
 	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
 
+		size_t amount = lb.count - 1;
 		lb_append(&context->yank_register,
 			  strdup(context->buffer.items[start]));
 		ed_context_overwrite(&lb, start, start);
+		context->line = address.position.as_line + amount;
 	} else {
-		if (context->yank_register.items != NULL) {
-			lb_clear(context->yank_register);
-		}
-
 		size_t start = line_to_index(address.position.as_range.start);
 		size_t end = line_to_index(address.position.as_range.end);
+
+		size_t amount = lb.count - (end - start);
 
 		for (size_t i = start; i <= end; ++i) {
 			lb_append(&context->yank_register,
@@ -427,6 +431,7 @@ bool ed_cmd_change(Ed_Address address)
 		}
 
 		ed_context_overwrite(&lb, start, end);
+		context->line = address.position.as_range.start + amount;
 	}
 
 	return true;
@@ -477,7 +482,7 @@ bool ed_cmd_edit(char *line)
 	FILE *f = fopen(line, "r");
 	if (f == NULL) {
 		context->change_count++;
-		fprintf(stderr, "%s: No such file or directory\n", line);
+		printf("%s: No such file or directory\n", line);
 		ed_return_error(ED_ERROR_INVALID_FILE);
 	}
 
@@ -795,22 +800,22 @@ void ed_print_error()
 	case ED_ERROR_NO_ERROR:
 		break;
 	case ED_ERROR_INVALID_ADDRESS: {
-		fprintf(stderr, "Invalid address.\n");
+		printf("Invalid address.\n");
 	} break;
 	case ED_ERROR_INVALID_COMMAND: {
-		fprintf(stderr, "Invalid command.\n");
+		printf("Invalid command.\n");
 	} break;
 	case ED_ERROR_INVALID_FILE: {
-		fprintf(stderr, "Cannot open input file\n");
+		printf("Cannot open input file\n");
 	} break;
 	case ED_ERROR_NO_UNDO: {
-		fprintf(stderr, "Nothing to undo.\n");
+		printf("Nothing to undo.\n");
 	} break;
 	case ED_ERROR_UNSAVED_CHANGES: {
-		fprintf(stderr, "Warning: buffer modified\n");
+		printf("Warning: buffer modified\n");
 	} break;
 	case ED_ERROR_UNKNOWN: {
-		fprintf(stderr, "Unknown error.\n");
+		printf("Unknown error.\n");
 	} break;
 	}
 }

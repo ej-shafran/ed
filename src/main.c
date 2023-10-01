@@ -23,7 +23,7 @@ int main(void)
 		bool success = ed_handle_cmd(line, &quit);
 		free(copy);
 		if (!success) {
-			fprintf(stderr, "?\n");
+			printf("?\n");
 			if (ed_should_print_error())
 				ed_print_error();
 		}

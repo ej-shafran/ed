@@ -7,7 +7,7 @@ fail() {
     local expected="$1"
     local recieved="$2"
 
-    printf "\033[0;31m FAIL\033[0m\n" >&2
+    printf "\n%-50s\033[0;31m FAIL\033[0m\n" "$TEST_NAME:0:0" >&2
     printf "\tExpected: '%s'\n" "$expected" >&2
     printf "\tRecieved: '%s'\n" "$recieved" >&2
 
@@ -21,8 +21,6 @@ unescape() {
 runtest() {
     local commands="$1"
 
-    printf "\n%-50s" "$TEST_NAME:"
-
     local recieved
     recieved="$(echo "$commands" | ./build/main 2>&1 | unescape)"
     local expected
@@ -31,7 +29,7 @@ runtest() {
     if [ "$recieved" != "$expected" ]; then
         fail "$expected" "$recieved"
     else
-        printf "\033[0;32m SUCCESS\033[0m\n"
+        printf "\n%-50s\033[0;32m SUCCESS\033[0m\n" "$TEST_NAME"
     fi
 }
 
