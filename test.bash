@@ -36,11 +36,12 @@ runtest() {
 }
 
 for test_dir in ./tests/*; do
-    for dir in "$test_dir"/*; do
-        COMMANDS="$dir/commands"
-        TEST_NAME="$dir"
+    for file in "$test_dir"/*; do
+        if [[ "$(basename "$file")" != _* ]]; then
+            TEST_NAME="$file"
 
-        runtest "$(cat "$COMMANDS")"
+            runtest "$(cat "$file")"
+        fi
     done
 done
 
