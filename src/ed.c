@@ -58,7 +58,6 @@ typedef enum {
 	ED_CMD_JOIN,
 	ED_CMD_LAST_ERR,
 	ED_CMD_MOVE,
-	ED_CMD_NUM,
 	ED_CMD_PRINT,
 	ED_CMD_PRINT_NUM,
 	ED_CMD_PUT,
@@ -312,7 +311,7 @@ Ed_Cmd_Type ed_parse_cmd_type(char **line)
 		*line += 1;
 		return ED_CMD_MOVE;
 	case 'n':
-		return ED_CMD_NUM;
+		return ED_CMD_PRINT_NUM;
 	case 'p':
 		*line += 1;
 		if (*line[0] == 'n')
@@ -382,8 +381,8 @@ bool ed_cmd_append(Ed_Address address)
 	}
 
 	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
+	ssize_t result = lb_read_to_dot(&lb);
+	if (result < 0) {
 		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
@@ -403,8 +402,8 @@ bool ed_cmd_change(Ed_Address address)
 	}
 
 	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
+	ssize_t result = lb_read_to_dot(&lb);
+	if (result < 0) {
 		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
@@ -477,17 +476,21 @@ bool ed_cmd_edit(char *line)
 
 	FILE *f = fopen(line, "r");
 	if (f == NULL) {
+		context->change_count++;
+		fprintf(stderr, "%s: No such file or directory\n", line);
 		ed_return_error(ED_ERROR_INVALID_FILE);
 	}
 
-	bool result = lb_read_file(&context->buffer, f);
+	ssize_t result = lb_read_file(&context->buffer, f);
 	context->line = context->buffer.count > 0 ? context->buffer.count - 1 :
 						    0;
 	fclose(f);
 
-	if (!result) {
+	if (result < 0) {
 		ed_return_error(ED_ERROR_UNKNOWN);
 	}
+
+	printf(PRISize "\n", result);
 
 	return true;
 }
@@ -501,8 +504,8 @@ bool ed_cmd_insert(Ed_Address address)
 	}
 
 	Line_Builder lb = { 0 };
-	bool result = lb_read_to_dot(&lb);
-	if (!result) {
+	ssize_t result = lb_read_to_dot(&lb);
+	if (result < 0) {
 		ed_return_error(ED_ERROR_UNKNOWN);
 	}
 
@@ -577,22 +580,6 @@ bool ed_cmd_move(char *line, Ed_Address address)
 	return true;
 }
 
-bool ed_cmd_num(Ed_Address address)
-{
-	if (address_out_of_range(address, false)) {
-		ed_return_error(ED_ERROR_INVALID_ADDRESS);
-	}
-
-	if (address.type == ED_ADDRESS_LINE) {
-		printf(PRISize "\n", address.position.as_line);
-	} else {
-		lb_num(address.position.as_range.start,
-		       address.position.as_range.end);
-	}
-
-	return true;
-}
-
 bool ed_cmd_print(Ed_Address address)
 {
 	Ed_Context *context = &ed_global_context;
@@ -622,7 +609,7 @@ bool ed_cmd_print_num(Ed_Address address)
 
 	if (address.type == ED_ADDRESS_LINE) {
 		size_t start = line_to_index(address.position.as_line);
-		printf(PRISize "     %s", address.position.as_line,
+		printf(PRISize "\t%s", address.position.as_line,
 		       context->buffer.items[start]);
 	} else {
 		lb_printn(context->buffer, address.position.as_range.start,
@@ -741,9 +728,6 @@ bool ed_handle_cmd(char *line, bool *quit)
 	case ED_CMD_MOVE: {
 		return ed_cmd_move(line, address);
 	} break;
-	case ED_CMD_NUM: {
-		return ed_cmd_num(address);
-	} break;
 	case ED_CMD_PRINT: {
 		return ed_cmd_print(address);
 	} break;
@@ -817,13 +801,13 @@ void ed_print_error()
 		fprintf(stderr, "Invalid command.\n");
 	} break;
 	case ED_ERROR_INVALID_FILE: {
-		fprintf(stderr, "Could not open file.\n");
+		fprintf(stderr, "Cannot open input file\n");
 	} break;
 	case ED_ERROR_NO_UNDO: {
 		fprintf(stderr, "Nothing to undo.\n");
 	} break;
 	case ED_ERROR_UNSAVED_CHANGES: {
-		fprintf(stderr, "Buffer has unsaved changes.\n");
+		fprintf(stderr, "Warning: buffer modified\n");
 	} break;
 	case ED_ERROR_UNKNOWN: {
 		fprintf(stderr, "Unknown error.\n");

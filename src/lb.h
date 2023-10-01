@@ -17,7 +17,7 @@ typedef da(char *) Line_Builder;
 
 // Read lines from `stream` into `lb` until `condition` is met.
 // Passing `""` as the condition will read until EOF.
-bool lb_read_from_stream(Line_Builder *lb, FILE *file, char *condition);
+ssize_t lb_read_from_stream(Line_Builder *lb, FILE *file, char *condition);
 
 // Insert the contents of `source` into `target` at `index`,
 // pushing off the contents of `target` to make room.
@@ -69,19 +69,11 @@ void lb_clone(Line_Builder *a, Line_Builder *b);
 		}                                       \
 	} while (0);
 
-// Print line numbers from `lb` into `STDOUT`
-#define lb_num(start, end)                          \
-	do {                                            \
-		for (size_t i = start - 1; i < end; ++i) { \
-			printf(PRISize "\n", i + 1);             \
-		}                                       \
-	} while (0);
-
 // Print lines and their line numbers from `lb` into `STDOUT`
 #define lb_printn(lb, start, end)                             \
 	do {                                                  \
 		for (size_t i = start - 1; i < end; ++i) {       \
-			printf(PRISize "     %s", i + 1, lb.items[i]); \
+			printf(PRISize "\t%s", i + 1, lb.items[i]); \
 		}                                             \
 	} while (0);
 

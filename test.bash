@@ -20,15 +20,16 @@ unescape() {
 
 runtest() {
     local commands="$1"
-    local expected="$2"
 
     printf "\n%-50s" "$TEST_NAME:"
 
-    local this
-    this="$(printf "%s" "$commands" | ./build/main 2>&1 | unescape)"
+    local recieved
+    recieved="$(echo "$commands" | ./build/main 2>&1 | unescape)"
+    local expected
+    expected="$(echo "$commands" | ed 2>&1 | unescape)"
 
-    if [ "$this" != "$expected" ]; then
-        fail "$expected" "$this"
+    if [ "$recieved" != "$expected" ]; then
+        fail "$expected" "$recieved"
     else
         printf "\033[0;32m SUCCESS\033[0m\n"
     fi
@@ -37,10 +38,9 @@ runtest() {
 for test_dir in ./tests/*; do
     for dir in "$test_dir"/*; do
         COMMANDS="$dir/commands"
-        EXPECTED="$dir/expected"
         TEST_NAME="$dir"
 
-        runtest "$(cat "$COMMANDS")" "$(unescape < "$EXPECTED")"
+        runtest "$(cat "$COMMANDS")"
     done
 done
 

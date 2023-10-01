@@ -1,21 +1,25 @@
 #include "./lb.h"
 
-bool lb_read_from_stream(Line_Builder *lb, FILE *file, char *condition)
+ssize_t lb_read_from_stream(Line_Builder *lb, FILE *file, char *condition)
 {
+	ssize_t bits_read = 0;
 	while (true) {
 		char *line = NULL;
 		size_t nsize = 0;
 		ssize_t nread = getline(&line, &nsize, file);
 
+		if (nread > 0) {
+			bits_read += nread;
+		}
 		if (nread < 1) {
 			if (line != NULL)
 				free(line);
-			return strlen(condition) == 0;
+			return bits_read;
 		}
 
 		if (strcmp(line, condition) == 0) {
 			free(line);
-			return true;
+			return bits_read;
 		}
 
 		lb_append(lb, line);
@@ -28,8 +32,7 @@ void lb_insert(Line_Builder *target, Line_Builder *source, size_t index)
 
 	realloc_chunk(target, source->count);
 
-	memmove(target->items + index + source->count,
-		target->items + index,
+	memmove(target->items + index + source->count, target->items + index,
 		(target->count - index) * sizeof(*target->items));
 	target->count += source->count;
 
@@ -71,7 +74,7 @@ void lb_pop(Line_Builder *target, size_t start, size_t end)
 
 bool lb_contains(Line_Builder lb, size_t n)
 {
-    return n < lb.count;
+	return n < lb.count;
 }
 
 void lb_clone(Line_Builder *a, Line_Builder *b)
